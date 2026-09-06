@@ -42,17 +42,53 @@ Es werden bewusst **keine kostenpflichtigen Google-APIs** verwendet. Der
 vollständige Google-Eintrag wird per Deeplink in Google Maps geöffnet — das
 kostet nichts und braucht kein Konto.
 
-## Loslegen
+## Aufs Handy bringen
+
+### Weg 1: Zum Ausprobieren (Expo Go, 10 Minuten)
+
+Voraussetzung: [Node.js](https://nodejs.org) auf dem Rechner, Handy und
+Rechner im selben WLAN.
 
 ```bash
 npm install
 npx expo start
 ```
 
-Dann in der App **Expo Go** (Play Store / App Store) den QR-Code scannen — die
-App startet direkt auf deinem Handy.
+Auf dem Handy die kostenlose App **Expo Go** installieren (Play Store) und
+den QR-Code aus dem Terminal scannen. Die App startet sofort. Änderungen am
+Code erscheinen live auf dem Handy.
 
-Weitere Befehle:
+Der Haken: Die App läuft nur, solange der Rechner läuft, und sie hat noch
+nicht das eigene Icon.
+
+### Weg 2: Als richtige App (APK, dauerhaft)
+
+Erzeugt eine Installationsdatei, die dauerhaft auf dem Handy bleibt — mit
+eigenem Icon, ohne Rechner, ohne Expo Go.
+
+```bash
+npm install -g eas-cli
+eas login                                  # kostenloses Expo-Konto
+eas build --platform android --profile preview
+```
+
+Der Build läuft auf Expos Servern (im kostenlosen Tarif enthalten) und dauert
+etwa 10–20 Minuten. Am Ende gibt es einen Link und einen QR-Code: auf dem
+Handy öffnen, die `.apk` herunterladen und installieren. Android fragt dabei
+einmal nach der Erlaubnis, Apps aus unbekannten Quellen zu installieren.
+
+### Weg 3: In den Play Store
+
+```bash
+eas build --platform android --profile production
+```
+
+Das erzeugt eine `.aab`-Datei zum Hochladen in die Google Play Console. Nötig
+sind ein Google-Play-Entwicklerkonto (einmalig 25 US-Dollar), eine
+Datenschutzerklärung und die Angaben zur Datensicherheit — dort ist
+anzugeben, dass die App keine Daten sammelt oder überträgt.
+
+### Weitere Befehle
 
 ```bash
 npm run typecheck   # TypeScript prüfen
@@ -86,22 +122,6 @@ Rot/Weiß, Retro mit modernen Mitteln: warmes Papierweiß als Grund, kräftiges
 Signalrot, dicke Konturen und harte Offset-Schatten statt weicher
 Weichzeichner — wie aufgeklebte Sticker. Die rot-weiße Markise zieht sich als
 Motiv durch alle Kopfbereiche.
-
-## Veröffentlichung im Play Store
-
-Wenn die App später in den Play Store soll:
-
-```bash
-npm install -g eas-cli
-eas login
-eas build:configure
-eas build --platform android --profile production
-```
-
-Das erzeugt eine `.aab`-Datei zum Hochladen in die Google Play Console. Nötig
-sind dafür ein Google-Play-Entwicklerkonto (einmalig 25 US-Dollar), eine
-Datenschutzerklärung und die Angaben zur Datensicherheit — dort ist
-anzugeben, dass die App keine Daten sammelt oder überträgt.
 
 ## Datenschutz
 

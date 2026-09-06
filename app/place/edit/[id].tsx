@@ -19,6 +19,7 @@ import { RetroButton } from '@/components/RetroButton';
 import { Screen } from '@/components/Screen';
 import { Surface } from '@/components/Surface';
 import { SUGGESTED_TAGS } from '@/constants/categories';
+import { useScrollToInput } from '@/hooks/useScrollToInput';
 import { getPlace, setTags, updatePlace } from '@/db/repository';
 import { colors, fonts, radius, spacing, type as typography } from '@/theme';
 import { formatDateShort, nightsBetween, parseGermanDate, todayIso } from '@/utils/format';
@@ -38,6 +39,9 @@ export default function EditPlaceScreen() {
   const [wouldReturn, setWouldReturn] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  // Hält das Notizfeld über der Tastatur.
+  const { scrollRef, onLayout, onFocus } = useScrollToInput();
 
   useEffect(() => {
     let active = true;
@@ -125,9 +129,14 @@ export default function EditPlaceScreen() {
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={80}
       >
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          ref={scrollRef}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+          automaticallyAdjustKeyboardInsets
+        >
           <Field label="NAME DES PLATZES">
             <TextInput
               value={name}
@@ -245,10 +254,12 @@ export default function EditPlaceScreen() {
             </View>
           </View>
 
+          <View onLayout={onLayout}>
           <Field label="DEIN TAGEBUCH-EINTRAG">
             <TextInput
               value={notes}
               onChangeText={setNotes}
+              onFocus={onFocus}
               style={[styles.input, styles.notesInput]}
               placeholder="Wie war es? Was war besonders?"
               placeholderTextColor={colors.inkFaint}
@@ -257,6 +268,7 @@ export default function EditPlaceScreen() {
               accessibilityLabel="Eigener Text"
             />
           </Field>
+          </View>
 
           <RetroButton
             label="Änderungen speichern"
@@ -323,7 +335,9 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: spacing.lg,
-    paddingBottom: spacing.xxxl,
+    // Reichlich Luft, damit die unteren Felder bei offener Tastatur weit
+    // genug nach oben geschoben werden können.
+    paddingBottom: spacing.xxxl * 2,
     gap: spacing.lg,
   },
   block: {

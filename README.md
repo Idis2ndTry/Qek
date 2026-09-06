@@ -98,10 +98,11 @@ Code erscheinen live auf dem Handy.
 Der Haken: Die App läuft nur, solange der Rechner läuft, und sie hat noch
 nicht das eigene Icon.
 
-### Weg 2: Als richtige App (APK, dauerhaft)
+### Weg 2: Als APK zum Verteilen (für Testgeräte)
 
 Erzeugt eine Installationsdatei, die dauerhaft auf dem Handy bleibt — mit
-eigenem Icon, ohne Rechner, ohne Expo Go.
+eigenem Icon, ohne Rechner, ohne Expo Go. Genau richtig, um die App auf
+mehreren Testgeräten auszuprobieren.
 
 ```bash
 npm install -g eas-cli
@@ -109,10 +110,24 @@ eas login                                  # kostenloses Expo-Konto
 eas build --platform android --profile preview
 ```
 
+Beim ersten Lauf fragt EAS zweimal nach:
+
+- *„Would you like to automatically create an EAS project?"* → **Yes**
+- *„Generate a new Android Keystore?"* → **Yes** (EAS erzeugt und verwahrt
+  den Signierschlüssel; nur damit lassen sich später Updates derselben App
+  ausliefern)
+
 Der Build läuft auf Expos Servern (im kostenlosen Tarif enthalten) und dauert
 etwa 10–20 Minuten. Am Ende gibt es einen Link und einen QR-Code: auf dem
 Handy öffnen, die `.apk` herunterladen und installieren. Android fragt dabei
 einmal nach der Erlaubnis, Apps aus unbekannten Quellen zu installieren.
+
+Der Download-Link lässt sich weitergeben — für weitere Testgeräte reicht es,
+ihn dort im Browser zu öffnen. Alternativ die heruntergeladene `.apk` per
+Messenger, Mail oder USB-Kabel auf die anderen Geräte kopieren.
+
+Jeder spätere Build braucht nur noch den einen Befehl; unter
+[expo.dev](https://expo.dev) liegen alle Builds mit ihren Links.
 
 ### Weg 3: In den Play Store
 

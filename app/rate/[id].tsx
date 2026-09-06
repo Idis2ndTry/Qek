@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -20,6 +22,7 @@ import { Screen } from '@/components/Screen';
 import { StarRating } from '@/components/StarRating';
 import { Surface } from '@/components/Surface';
 import { CATEGORIES, STAR_LABELS } from '@/constants/categories';
+import { useScrollToInput } from '@/hooks/useScrollToInput';
 import { computeOverall, getPlace, setRating, updatePlace } from '@/db/repository';
 import { colors, fonts, radius, spacing, type as typography } from '@/theme';
 import { formatScore } from '@/utils/format';
@@ -225,11 +228,21 @@ function Summary({
   onJumpTo,
   onFinish,
 }: SummaryProps) {
+  // Ohne das hier verschwindet das Textfeld hinter der Tastatur, sobald
+  // man zu tippen anfängt.
+  const { scrollRef, onLayout, onFocus } = useScrollToInput();
+
   return (
+    <KeyboardAvoidingView
+      style={styles.flex}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
     <ScrollView
+      ref={scrollRef}
       contentContainerStyle={styles.summary}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="interactive"
+      automaticallyAdjustKeyboardInsets
     >
       <Surface style={styles.summaryCard} offset={5}>
         <Text style={styles.summaryLabel}>DEINE GESAMTNOTE</Text>
@@ -271,10 +284,12 @@ function Summary({
       </View>
 
       <Text style={styles.sectionTitle}>Dein Tagebuch-Eintrag</Text>
+      <View onLayout={onLayout}>
       <Surface style={styles.notesCard} offset={3}>
         <TextInput
           value={notes}
           onChangeText={onChangeNotes}
+          onFocus={onFocus}
           placeholder="Was ist dir in Erinnerung geblieben? Der Blick vom Stellplatz, das Wetter, die Nachbarn, was du beim nächsten Mal anders machen würdest …"
           placeholderTextColor={colors.inkFaint}
           multiline
@@ -283,6 +298,7 @@ function Summary({
           accessibilityLabel="Eigener Text zum Platz"
         />
       </Surface>
+      </View>
 
       <RetroButton
         label="Bewertung speichern"
@@ -295,6 +311,7 @@ function Summary({
         Du kannst alles später jederzeit ändern – tippe im Platz einfach auf "Bewerten".
       </Text>
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -381,9 +398,14 @@ const styles = StyleSheet.create({
     ...typography.label,
     color: colors.red,
   },
+  flex: {
+    flex: 1,
+  },
   summary: {
     padding: spacing.lg,
-    paddingBottom: spacing.xxxl,
+    // Reichlich Luft, damit das Textfeld auch bei offener Tastatur weit
+    // genug nach oben geschoben werden kann.
+    paddingBottom: spacing.xxxl * 2,
     gap: spacing.lg,
   },
   summaryCard: {

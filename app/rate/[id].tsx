@@ -321,7 +321,6 @@ const styles = StyleSheet.create({
   step: {
     flex: 1,
     padding: spacing.xl,
-    justifyContent: 'space-between',
   },
   stepTop: {
     alignItems: 'center',
@@ -358,7 +357,9 @@ const styles = StyleSheet.create({
     maxWidth: 320,
   },
   starBlock: {
+    flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
     gap: spacing.md,
     paddingVertical: spacing.xl,
   },

@@ -1,9 +1,13 @@
 /**
- * Ortssuche über Nominatim (OpenStreetMap).
+ * Orts- und Adresssuche über Nominatim (OpenStreetMap).
  *
- * Kostenlos und ohne API-Key. Die Nutzungsbedingungen verlangen einen
+ * Kostenlos und ohne API-Schlüssel. Die Nutzungsbedingungen verlangen einen
  * aussagekräftigen User-Agent und höchstens eine Anfrage pro Sekunde -
  * beides erledigt dieses Modul.
+ *
+ * Nominatim ist eine Textsuche: Es findet einen Campingplatz nur, wenn der
+ * Suchbegriff im eingetragenen Namen vorkommt. Für die Plätze in der
+ * Umgebung eines Ortes ist `overpass.ts` zuständig.
  */
 
 const BASE_URL = 'https://nominatim.openstreetmap.org';
@@ -12,11 +16,22 @@ const MIN_REQUEST_GAP_MS = 1100;
 
 let lastRequestAt = 0;
 
-async function throttle(): Promise<void> {
+/** Setzt die Drosselung zurück. Nur für Tests gedacht. */
+export function resetRateLimit(): void {
+  lastRequestAt = 0;
+}
+
+/**
+ * Hält den Mindestabstand zwischen zwei Anfragen ein. Bricht sofort ab,
+ * wenn die Suche in der Wartezeit verworfen wurde - sonst blockiert eine
+ * längst veraltete Anfrage die nächste.
+ */
+async function throttle(signal?: AbortSignal): Promise<void> {
   const wait = lastRequestAt + MIN_REQUEST_GAP_MS - Date.now();
   if (wait > 0) {
     await new Promise((resolve) => setTimeout(resolve, wait));
   }
+  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
   lastRequestAt = Date.now();
 }
 
@@ -46,7 +61,14 @@ type NominatimResult = {
   address?: Record<string, string>;
 };
 
-function toSuggestion(result: NominatimResult): PlaceSuggestion | null {
+/** OSM-Werte, die einen Campingplatz oder Stellplatz bezeichnen. */
+const CAMPSITE_TYPES = new Set(['camp_site', 'caravan_site', 'camp_pitch', 'camping']);
+
+export function isCampsiteKind(kind: string | null | undefined): boolean {
+  return Boolean(kind && CAMPSITE_TYPES.has(kind));
+}
+
+export function toSuggestion(result: NominatimResult): PlaceSuggestion | null {
   const lat = Number(result.lat);
   const lon = Number(result.lon);
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
@@ -66,23 +88,23 @@ function toSuggestion(result: NominatimResult): PlaceSuggestion | null {
 }
 
 /**
- * Sucht Campingplätze und andere Orte zum Suchbegriff.
- * `signal` erlaubt es, eine Anfrage abzubrechen, wenn weitergetippt wird.
+ * Sucht Orte, Adressen und namentlich passende Campingplätze.
+ * `signal` bricht die Anfrage ab, wenn weitergetippt wird.
  */
 export async function searchPlaces(
   query: string,
   options?: { signal?: AbortSignal; limit?: number },
 ): Promise<PlaceSuggestion[]> {
   const trimmed = query.trim();
-  if (trimmed.length < 3) return [];
+  if (trimmed.length < 2) return [];
 
-  await throttle();
+  await throttle(options?.signal);
 
   const params = new URLSearchParams({
     q: trimmed,
     format: 'jsonv2',
     addressdetails: '1',
-    limit: String(options?.limit ?? 12),
+    limit: String(options?.limit ?? 25),
     'accept-language': 'de',
   });
 
@@ -96,27 +118,23 @@ export async function searchPlaces(
   }
 
   const data = (await response.json()) as NominatimResult[];
+  if (!Array.isArray(data)) return [];
+
   return data
     .map(toSuggestion)
     .filter((s): s is PlaceSuggestion => s !== null)
-    .sort((a, b) => rankKind(b.kind) - rankKind(a.kind));
+    // Campingplätze nach oben, sonst die Reihenfolge von Nominatim behalten -
+    // die ist nach Relevanz sortiert.
+    .sort((a, b) => Number(isCampsiteKind(b.kind)) - Number(isCampsiteKind(a.kind)));
 }
 
-/** Campingplätze sollen in der Trefferliste oben stehen. */
-function rankKind(kind: string | null): number {
-  if (!kind) return 0;
-  if (kind === 'camp_site' || kind === 'caravan_site' || kind === 'camp_pitch') return 2;
-  if (kind === 'camping' || kind === 'tourism') return 1;
-  return 0;
-}
-
-/** Adresse zu Koordinaten - für "Platz in meiner Nähe". */
+/** Adresse zu Koordinaten - für "Platz in meiner Nähe" und die Kartenauswahl. */
 export async function reverseGeocode(
   lat: number,
   lon: number,
   options?: { signal?: AbortSignal },
 ): Promise<PlaceSuggestion | null> {
-  await throttle();
+  await throttle(options?.signal);
 
   const params = new URLSearchParams({
     lat: String(lat),

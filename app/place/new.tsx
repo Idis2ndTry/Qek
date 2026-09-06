@@ -20,131 +20,107 @@ import { RetroButton } from '@/components/RetroButton';
 import { Screen } from '@/components/Screen';
 import { Surface } from '@/components/Surface';
 import { createPlace, setTags } from '@/db/repository';
-import { reverseGeocode, searchPlaces, type PlaceSuggestion } from '@/services/nominatim';
-import {
-  findCampsitesNear,
-  formatDistance,
-  searchCampsitesByName,
-  type CampsiteSuggestion,
-} from '@/services/overpass';
+import { reverseGeocode, type PlaceSuggestion } from '@/services/nominatim';
+import { findCampsitesNear, formatDistance, type CampsiteSuggestion } from '@/services/overpass';
+import { runSearch, type SearchUpdate } from '@/services/campsiteSearch';
 import { colors, fonts, radius, spacing, type as typography } from '@/theme';
 
 type Row =
-  | { kind: 'campsite'; item: CampsiteSuggestion }
+  | { kind: 'campsite'; item: CampsiteSuggestion; distance: boolean }
   | { kind: 'place'; item: PlaceSuggestion };
 
-type Section = {
-  title: string;
-  hint?: string;
-  data: Row[];
-};
+type Section = { title: string; hint?: string; data: Row[] };
 
-/** Umkreis, in dem "Plätze in der Nähe" zuerst gesucht wird. */
-const NEARBY_RADIUS_M = 25_000;
+/** Wartezeit nach dem letzten Tastendruck, bevor gesucht wird. */
+const DEBOUNCE_MS = 450;
+
+const EMPTY_RESULT: SearchUpdate = {
+  campsites: [],
+  places: [],
+  nearby: [],
+  nearbyLabel: null,
+  loading: false,
+  placesFailed: false,
+  nearbyFailed: false,
+};
 
 /**
  * Neuen Campingplatz anlegen.
  *
- * Die Suche läuft über zwei Quellen: Nominatim findet Orte und Adressen,
- * Overpass holt gezielt alles, was in OpenStreetMap als Campingplatz
- * eingetragen ist - auch kleine und namenlose. Tippt man einen Ort an,
- * listet die App alle Plätze im Umkreis auf.
+ * Die Suche kombiniert zwei Quellen: Nominatim liefert Orte, Adressen und
+ * namentliche Treffer, Overpass alle Campingplätze rund um den besten
+ * Treffer - auch die kleinen und namenlosen. Beide melden sich einzeln,
+ * damit die Liste nicht auf die langsamere Quelle wartet.
  */
 export default function NewPlaceScreen() {
   const [name, setName] = useState('');
   const [selected, setSelected] = useState<PlaceSuggestion | null>(null);
+  const [result, setResult] = useState<SearchUpdate>(EMPTY_RESULT);
 
-  const [campsites, setCampsites] = useState<CampsiteSuggestion[]>([]);
-  const [places, setPlaces] = useState<PlaceSuggestion[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [searchError, setSearchError] = useState<string | null>(null);
-
-  /** Gesetzt, solange die Umkreisliste eines Ortes angezeigt wird. */
-  const [nearby, setNearby] = useState<{
+  /** Gesetzt, solange die Umkreisliste eines angetippten Ortes läuft. */
+  const [aroundPlace, setAroundPlace] = useState<{
     label: string;
-    lat: number;
-    lon: number;
     results: CampsiteSuggestion[];
+    loading: boolean;
+    failed: boolean;
   } | null>(null);
-  const [loadingNearby, setLoadingNearby] = useState(false);
 
   const [manualPin, setManualPin] = useState<{ lat: number; lon: number } | null>(null);
+  const [locating, setLocating] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const abortRef = useRef<AbortController | null>(null);
+  const cancelRef = useRef<(() => void) | null>(null);
+  const aroundAbort = useRef<AbortController | null>(null);
 
-  // Suche während des Tippens, entprellt - beide Dienste erlauben nur
-  // wenige Anfragen pro Sekunde.
+  // Suche während des Tippens, entprellt.
   useEffect(() => {
-    if (selected || nearby || name.trim().length < 3) {
-      if (!selected && !nearby && name.trim().length < 3) {
-        setCampsites([]);
-        setPlaces([]);
-      }
+    if (selected || aroundPlace) return;
+
+    const query = name.trim();
+    if (query.length < 2) {
+      cancelRef.current?.();
+      setResult(EMPTY_RESULT);
       return;
     }
 
     const timer = setTimeout(() => {
-      abortRef.current?.abort();
-      const controller = new AbortController();
-      abortRef.current = controller;
-
-      setSearching(true);
-      setSearchError(null);
-
-      // Beide Quellen parallel: eine langsame darf die andere nicht
-      // aufhalten, und ein Ausfall soll nicht die ganze Suche kippen.
-      Promise.allSettled([
-        searchPlaces(name, { signal: controller.signal }),
-        searchCampsitesByName(name, { signal: controller.signal }),
-      ])
-        .then(([nominatim, overpass]) => {
-          if (controller.signal.aborted) return;
-
-          const found = overpass.status === 'fulfilled' ? overpass.value : [];
-          const general = nominatim.status === 'fulfilled' ? nominatim.value : [];
-
-          // Was Overpass schon als Campingplatz liefert, muss nicht noch
-          // einmal als Adresse auftauchen.
-          const seen = new Set(found.map((c) => c.sourceId));
-          setCampsites(found.sort((a, b) => a.name.localeCompare(b.name, 'de')));
-          setPlaces(general.filter((p) => !seen.has(p.sourceId)));
-
-          if (nominatim.status === 'rejected' && overpass.status === 'rejected') {
-            setSearchError(
-              'Die Suche ist gerade nicht erreichbar. Du kannst den Platz auch ohne Standort speichern.',
-            );
-          }
-        })
-        .finally(() => {
-          if (!controller.signal.aborted) setSearching(false);
-        });
-    }, 650);
+      cancelRef.current?.();
+      cancelRef.current = runSearch(query, setResult);
+    }, DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
-  }, [name, selected, nearby]);
+  }, [name, selected, aroundPlace]);
 
-  useEffect(() => () => abortRef.current?.abort(), []);
+  useEffect(
+    () => () => {
+      cancelRef.current?.();
+      aroundAbort.current?.abort();
+    },
+    [],
+  );
 
   /** Alle Campingplätze rund um einen Punkt laden. */
-  const loadNearby = useCallback(async (label: string, lat: number, lon: number) => {
+  const loadAround = useCallback(async (label: string, lat: number, lon: number) => {
     Keyboard.dismiss();
-    setLoadingNearby(true);
-    setSearchError(null);
-    setNearby({ label, lat, lon, results: [] });
+    cancelRef.current?.();
+    aroundAbort.current?.abort();
+
+    const controller = new AbortController();
+    aroundAbort.current = controller;
+    setAroundPlace({ label, results: [], loading: true, failed: false });
+
     try {
-      const results = await findCampsitesNear(lat, lon, { radiusMeters: NEARBY_RADIUS_M });
-      setNearby({ label, lat, lon, results });
+      const results = await findCampsitesNear(lat, lon, { signal: controller.signal });
+      if (controller.signal.aborted) return;
+      setAroundPlace({ label, results, loading: false, failed: false });
     } catch {
-      setNearby(null);
-      setSearchError('Die Umkreissuche ist gerade nicht erreichbar. Versuch es gleich noch einmal.');
-    } finally {
-      setLoadingNearby(false);
+      if (controller.signal.aborted) return;
+      setAroundPlace({ label, results: [], loading: false, failed: true });
     }
   }, []);
 
   const useCurrentLocation = async () => {
-    setLoadingNearby(true);
+    setLocating(true);
     try {
       const permission = await Location.requestForegroundPermissionsAsync();
       if (!permission.granted) {
@@ -157,13 +133,11 @@ export default function NewPlaceScreen() {
       const position = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });
-      const { latitude, longitude } = position.coords;
-      setLoadingNearby(false);
-      await loadNearby('deinem Standort', latitude, longitude);
+      await loadAround('deinem Standort', position.coords.latitude, position.coords.longitude);
     } catch {
       Alert.alert('Standort nicht gefunden', 'Versuch es noch einmal oder such den Platz per Name.');
     } finally {
-      setLoadingNearby(false);
+      setLocating(false);
     }
   };
 
@@ -181,9 +155,8 @@ export default function NewPlaceScreen() {
     };
     setSelected(fallback);
     setManualPin(null);
-    setNearby(null);
+    setAroundPlace(null);
 
-    // Adresse nachschlagen, damit der Eintrag nicht nur aus Zahlen besteht.
     try {
       const found = await reverseGeocode(manualPin.lat, manualPin.lon);
       if (found) setSelected({ ...fallback, address: found.address, country: found.country });
@@ -193,11 +166,18 @@ export default function NewPlaceScreen() {
   };
 
   const choose = (suggestion: PlaceSuggestion) => {
+    cancelRef.current?.();
+    aroundAbort.current?.abort();
     setSelected(suggestion);
-    setNearby(null);
+    setAroundPlace(null);
     setManualPin(null);
     if (!name.trim() || isGenericName(name)) setName(suggestion.name);
     Keyboard.dismiss();
+  };
+
+  const backToSearch = () => {
+    aroundAbort.current?.abort();
+    setAroundPlace(null);
   };
 
   const save = async () => {
@@ -228,7 +208,9 @@ export default function NewPlaceScreen() {
     }
   };
 
-  const sections = buildSections({ nearby, campsites, places });
+  const sections = buildSections(result, aroundPlace);
+  const busy = aroundPlace ? aroundPlace.loading : result.loading;
+  const empty = sections.every((s) => s.data.length === 0);
 
   return (
     <Screen>
@@ -246,17 +228,19 @@ export default function NewPlaceScreen() {
             onChangeName={(value) => {
               setName(value);
               if (selected) setSelected(null);
-              if (nearby) setNearby(null);
+              if (aroundPlace) backToSearch();
             }}
-            searching={searching}
+            busy={busy}
             selected={selected}
             onClearSelected={() => setSelected(null)}
-            nearby={nearby}
-            onClearNearby={() => setNearby(null)}
-            loadingNearby={loadingNearby}
+            aroundLabel={aroundPlace?.label ?? null}
+            onBackToSearch={backToSearch}
+            locating={locating}
             onUseCurrentLocation={useCurrentLocation}
-            searchError={searchError}
-            hasResults={sections.some((s) => s.data.length > 0)}
+            result={result}
+            aroundFailed={aroundPlace?.failed ?? false}
+            queryLength={name.trim().length}
+            empty={empty}
           />
         }
         renderSectionHeader={({ section }) =>
@@ -271,26 +255,21 @@ export default function NewPlaceScreen() {
           row.kind === 'campsite' ? (
             <CampsiteRow
               item={row.item}
-              showDistance={Boolean(nearby)}
+              showDistance={row.distance}
               onPress={() => choose(row.item)}
             />
           ) : (
             <PlaceRow
               item={row.item}
               onPress={() => choose(row.item)}
-              onShowNearby={() => loadNearby(row.item.name, row.item.lat, row.item.lon)}
+              onShowNearby={() => loadAround(row.item.name, row.item.lat, row.item.lon)}
             />
           )
         }
         ListFooterComponent={
           selected ? null : (
             <ManualFallback
-              visible={
-                name.trim().length >= 3 &&
-                !searching &&
-                !loadingNearby &&
-                sections.every((s) => s.data.length === 0)
-              }
+              visible={name.trim().length >= 2 && !busy && empty}
               pin={manualPin}
               onSetPin={setManualPin}
               onConfirm={useManualPin}
@@ -315,36 +294,51 @@ export default function NewPlaceScreen() {
 }
 
 /** Gruppiert die Treffer in die Abschnitte der Liste. */
-function buildSections(input: {
-  nearby: { label: string; results: CampsiteSuggestion[] } | null;
-  campsites: CampsiteSuggestion[];
-  places: PlaceSuggestion[];
-}): Section[] {
-  if (input.nearby) {
+export function buildSections(
+  result: SearchUpdate,
+  aroundPlace: { label: string; results: CampsiteSuggestion[] } | null,
+): Section[] {
+  if (aroundPlace) {
     return [
       {
-        title: `Campingplätze rund um ${input.nearby.label}`,
+        title: `Campingplätze rund um ${aroundPlace.label}`,
         hint:
-          input.nearby.results.length > 0
-            ? `${input.nearby.results.length} Treffer im Umkreis von ${NEARBY_RADIUS_M / 1000} km`
+          aroundPlace.results.length > 0
+            ? `${aroundPlace.results.length} ${aroundPlace.results.length === 1 ? 'Platz' : 'Plätze'} gefunden`
             : undefined,
-        data: input.nearby.results.map((item) => ({ kind: 'campsite' as const, item })),
+        data: aroundPlace.results.map((item) => ({
+          kind: 'campsite' as const,
+          item,
+          distance: true,
+        })),
       },
     ];
   }
 
   const sections: Section[] = [];
-  if (input.campsites.length > 0) {
+  if (result.campsites.length > 0) {
     sections.push({
       title: 'Campingplätze',
-      data: input.campsites.map((item) => ({ kind: 'campsite' as const, item })),
+      data: result.campsites.map((item) => ({
+        kind: 'campsite' as const,
+        item,
+        distance: false,
+      })),
     });
   }
-  if (input.places.length > 0) {
+  if (result.nearby.length > 0) {
+    sections.push({
+      title: result.nearbyLabel
+        ? `Weitere Plätze rund um ${result.nearbyLabel}`
+        : 'Weitere Plätze in der Umgebung',
+      data: result.nearby.map((item) => ({ kind: 'campsite' as const, item, distance: true })),
+    });
+  }
+  if (result.places.length > 0) {
     sections.push({
       title: 'Orte & Adressen',
       hint: 'Ort antippen zeigt alle Campingplätze im Umkreis',
-      data: input.places.map((item) => ({ kind: 'place' as const, item })),
+      data: result.places.map((item) => ({ kind: 'place' as const, item })),
     });
   }
   return sections;
@@ -354,7 +348,7 @@ function buildSections(input: {
  * Was OpenStreetMap über den Platz weiß, direkt als Merkmal-Chips
  * übernehmen - das spart Tipparbeit beim ersten Eintrag.
  */
-function tagsFromFeatures(item: CampsiteSuggestion): string[] {
+export function tagsFromFeatures(item: CampsiteSuggestion): string[] {
   const tags: string[] = [];
   if (item.features.caravans === true) tags.push('Wohnwagen-tauglich');
   if (item.features.power === true) tags.push('Stromanschluss');
@@ -372,29 +366,33 @@ function isGenericName(value: string): boolean {
 type HeaderProps = {
   name: string;
   onChangeName: (value: string) => void;
-  searching: boolean;
+  busy: boolean;
   selected: PlaceSuggestion | null;
   onClearSelected: () => void;
-  nearby: { label: string } | null;
-  onClearNearby: () => void;
-  loadingNearby: boolean;
+  aroundLabel: string | null;
+  onBackToSearch: () => void;
+  locating: boolean;
   onUseCurrentLocation: () => void;
-  searchError: string | null;
-  hasResults: boolean;
+  result: SearchUpdate;
+  aroundFailed: boolean;
+  queryLength: number;
+  empty: boolean;
 };
 
 function SearchHeader({
   name,
   onChangeName,
-  searching,
+  busy,
   selected,
   onClearSelected,
-  nearby,
-  onClearNearby,
-  loadingNearby,
+  aroundLabel,
+  onBackToSearch,
+  locating,
   onUseCurrentLocation,
-  searchError,
-  hasResults,
+  result,
+  aroundFailed,
+  queryLength,
+  empty,
 }: HeaderProps) {
   return (
     <View style={styles.headerBlock}>
@@ -411,7 +409,7 @@ function SearchHeader({
           returnKeyType="search"
           accessibilityLabel="Name des Campingplatzes"
         />
-        {searching && <ActivityIndicator size="small" color={colors.red} />}
+        {busy && <ActivityIndicator size="small" color={colors.red} />}
       </Surface>
 
       {selected ? (
@@ -430,52 +428,106 @@ function SearchHeader({
         </View>
       ) : (
         <>
-          {nearby ? (
-            <Pressable
-              style={styles.backToSearch}
-              onPress={onClearNearby}
-              accessibilityRole="button"
-            >
+          {aroundLabel ? (
+            <Pressable style={styles.backRow} onPress={onBackToSearch} accessibilityRole="button">
               <Ionicons name="arrow-back" size={16} color={colors.red} />
-              <Text style={styles.backToSearchText}>Zurück zur Suche</Text>
+              <Text style={styles.backText}>Zurück zur Suche</Text>
             </Pressable>
           ) : (
             <Pressable
               style={styles.locationRow}
               onPress={onUseCurrentLocation}
-              disabled={loadingNearby}
+              disabled={locating}
               accessibilityRole="button"
               accessibilityLabel="Campingplätze in meiner Nähe suchen"
             >
-              {loadingNearby ? (
+              {locating ? (
                 <ActivityIndicator size="small" color={colors.red} />
               ) : (
                 <Ionicons name="navigate-circle-outline" size={22} color={colors.red} />
               )}
               <Text style={styles.locationText}>
-                {loadingNearby ? 'Suche läuft …' : 'Plätze in meiner Nähe'}
+                {locating ? 'Standort wird gesucht …' : 'Plätze in meiner Nähe'}
               </Text>
               <Ionicons name="chevron-forward" size={17} color={colors.inkFaint} />
             </Pressable>
           )}
 
-          {loadingNearby && nearby ? (
-            <View style={styles.inlineLoading}>
-              <ActivityIndicator size="small" color={colors.red} />
-              <Text style={styles.hint}>Campingplätze im Umkreis werden geladen …</Text>
-            </View>
-          ) : searchError ? (
-            <Text style={styles.error}>{searchError}</Text>
-          ) : !hasResults && name.trim().length < 3 ? (
-            <Text style={styles.hint}>
-              Tipp den Namen des Platzes ein – oder einfach den Ort, dann zeigt dir die App alle
-              Campingplätze in der Umgebung.
-            </Text>
-          ) : null}
+          <StatusLine
+            busy={busy}
+            aroundLabel={aroundLabel}
+            result={result}
+            aroundFailed={aroundFailed}
+            queryLength={queryLength}
+            empty={empty}
+          />
         </>
       )}
     </View>
   );
+}
+
+/** Eine Zeile, die immer sagt, was die Suche gerade tut. */
+function StatusLine({
+  busy,
+  aroundLabel,
+  result,
+  aroundFailed,
+  queryLength,
+  empty,
+}: {
+  busy: boolean;
+  aroundLabel: string | null;
+  result: SearchUpdate;
+  aroundFailed: boolean;
+  queryLength: number;
+  empty: boolean;
+}) {
+  if (busy) {
+    return (
+      <View style={styles.statusRow}>
+        <ActivityIndicator size="small" color={colors.red} />
+        <Text style={styles.hint}>
+          {aroundLabel ? `Campingplätze rund um ${aroundLabel} werden geladen …` : 'Suche läuft …'}
+        </Text>
+      </View>
+    );
+  }
+
+  if (aroundFailed) {
+    return (
+      <Text style={styles.error}>
+        Die Campingplatz-Suche ist gerade nicht erreichbar. Versuch es in einem Moment noch einmal.
+      </Text>
+    );
+  }
+
+  if (queryLength < 2) {
+    return (
+      <Text style={styles.hint}>
+        Tipp den Namen des Platzes ein – oder einfach den Ort, dann zeigt dir die App alle
+        Campingplätze in der Umgebung.
+      </Text>
+    );
+  }
+
+  if (result.placesFailed && empty) {
+    return (
+      <Text style={styles.error}>
+        Keine Verbindung zur Ortssuche. Du kannst den Platz auch ohne Standort speichern.
+      </Text>
+    );
+  }
+
+  if (result.nearbyFailed && !empty) {
+    return (
+      <Text style={styles.hint}>
+        Die Umgebungssuche war nicht erreichbar – hier sind nur die direkten Namenstreffer.
+      </Text>
+    );
+  }
+
+  return null;
 }
 
 function CampsiteRow({
@@ -522,7 +574,9 @@ function CampsiteRow({
           </Text>
         )}
       </View>
-      {showDistance && <Text style={styles.distance}>{formatDistance(item.distanceMeters)}</Text>}
+      {showDistance && Number.isFinite(item.distanceMeters) && (
+        <Text style={styles.distance}>{formatDistance(item.distanceMeters)}</Text>
+      )}
     </Pressable>
   );
 }
@@ -654,17 +708,17 @@ const styles = StyleSheet.create({
     flex: 1,
     color: colors.ink,
   },
-  backToSearch: {
+  backRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     paddingVertical: spacing.sm,
   },
-  backToSearchText: {
+  backText: {
     ...typography.label,
     color: colors.red,
   },
-  inlineLoading: {
+  statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,

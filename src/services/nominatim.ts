@@ -128,6 +128,30 @@ export async function searchPlaces(
     .sort((a, b) => Number(isCampsiteKind(b.kind)) - Number(isCampsiteKind(a.kind)));
 }
 
+/**
+ * Wörter, die schon anzeigen, dass jemand nach einem Platz sucht. Steht so
+ * eines im Suchbegriff, braucht es die Zusatzsuche unten nicht.
+ */
+const CAMPING_WORDS = /\b(camping|campingplatz|campground|stellplatz|wohnmobil|caravan|reisemobil)\b/i;
+
+export function mentionsCamping(query: string): boolean {
+  return CAMPING_WORDS.test(query);
+}
+
+/**
+ * Zusätzliche Schreibweisen für dieselbe Suche.
+ *
+ * Nominatim ist eine reine Textsuche über den eingetragenen Namen: Wer
+ * "Timmeler Meer" eingibt, bekommt den See - der Platz heißt in der Karte
+ * "Campingplatz Timmeler Meer" und fällt hinten runter. Mit dem
+ * vorangestellten Wort trifft die Suche den Namen genau.
+ */
+export function campingVariants(query: string): string[] {
+  const term = query.trim();
+  if (!term || mentionsCamping(term)) return [];
+  return [`Campingplatz ${term}`, `Camping ${term}`];
+}
+
 /** Adresse zu Koordinaten - für "Platz in meiner Nähe" und die Kartenauswahl. */
 export async function reverseGeocode(
   lat: number,

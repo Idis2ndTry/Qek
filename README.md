@@ -8,16 +8,18 @@ Alles bleibt auf deinem Gerät.
 
 ## Was die App kann
 
-- **Plätze finden** — die Suche läuft in zwei Stufen, damit auch kleine
-  Plätze auftauchen: Zuerst die schnelle Namens- und Ortssuche, deren
-  Treffer sofort erscheinen. Parallel holt die App alle Campingplätze rund
-  um den besten Treffer aus der Karte und ergänzt sie — inklusive
-  namenloser und winziger Plätze, mit Entfernung und Ausstattung. Dazu
-  „Plätze in meiner Nähe" per GPS. Adresse, Koordinaten und Land trägt die
-  App selbst ein, bekannte Merkmale (Strom, Hunde, Wohnwagen) kommen gleich
-  als Chips mit.
-- **Wenn ein Platz gar nicht eingetragen ist** — Standort selbst auf der
-  Karte antippen, die Adresse wird dazu nachgeschlagen.
+- **Plätze finden** — die Ergebnisliste enthält ausschließlich
+  Campingplätze, nie Orte. Drei Wege laufen dafür nebeneinander: die
+  Namenssuche, dieselbe Suche noch einmal mit „Campingplatz" davor (so
+  heißen die Plätze in der Karte meist — wer nur „Timmeler Meer" eingibt,
+  bekäme sonst den See), und die Umkreissuche um den besten Treffer, die
+  auch namenlose und winzige Plätze liefert. Dazu „Plätze in meiner Nähe"
+  per GPS. Adresse, Koordinaten und Land trägt die App selbst ein, bekannte
+  Merkmale (Strom, Hunde, Wohnwagen) kommen gleich als Chips mit.
+- **Wenn ein Platz nicht dabei ist** — unter jeder Trefferliste steht
+  „Dein Platz ist nicht dabei?". Dahinter: Standort selbst auf der Karte
+  antippen (die Adresse wird nachgeschlagen), weiter weg suchen, oder den
+  Platz ganz ohne Standort anlegen.
 - **Durchklick-Bewertung** — zehn Kategorien, eine Frage pro Bildschirm,
   fünf große Sterne. Kategorien lassen sich überspringen.
 - **Gewichtete Gesamtnote** — Sanitär, Preis und Lage zählen anderthalbfach,
@@ -54,11 +56,23 @@ Campingplatz nur bei fast exaktem Namenstreffer. Overpass fragt die Karte
 direkt ab („alles, was in diesem Umkreis als Campingplatz eingetragen ist")
 und liefert damit auch kleine, namenlose und abgelegene Plätze.
 
-Entscheidend ist, dass die beiden **entkoppelt** laufen (`campsiteSearch.ts`):
-Nominatim antwortet in unter einer Sekunde und füllt die Liste sofort, die
-Umkreissuche ergänzt später. Würden beide gemeinsam abgewartet, sähe man
-sekundenlang nichts — und beim Weitertippen würde alles verworfen, bevor je
-ein Treffer erscheint. Fällt eine Quelle aus, bleibt die andere nutzbar.
+Entscheidend ist, dass die Quellen **entkoppelt** laufen
+(`campsiteSearch.ts`): Nominatim antwortet in unter einer Sekunde und füllt
+die Liste sofort, die Umkreissuche ergänzt später. Würden beide gemeinsam
+abgewartet, sähe man sekundenlang nichts — und beim Weitertippen würde alles
+verworfen, bevor je ein Treffer erscheint. Fällt eine Quelle aus, bleibt die
+andere nutzbar.
+
+Die dritte Quelle ist ein Trick gegen Nominatims Schwäche: Es sucht nur im
+eingetragenen Namen. Der Platz am Timmeler Meer heißt in der Karte
+„Campingplatz Timmeler Meer" — die Eingabe „Timmeler Meer" trifft daher den
+See. Die App schickt deshalb zusätzlich `Campingplatz <Begriff>` und
+`Camping <Begriff>` los und führt alle Treffer zusammen.
+
+Overpass-Abfragen sind bewusst in der ausgeschriebenen Form mit einzelnen
+node/way/relation-Zeilen und ohne Wert-Regex formuliert — Kurzformen wie
+`nwr` versteht nicht jeder Mirror. Schlägt POST fehl, wird GET versucht;
+fünf Server werden der Reihe nach durchprobiert.
 
 Overpass wird bewusst nur mit `around:`-Abfragen benutzt. Die laufen über
 einen räumlichen Index und antworten in ein bis zwei Sekunden; eine

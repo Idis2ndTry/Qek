@@ -2,9 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
   Keyboard,
   Pressable,
-  SectionList,
   StyleSheet,
   Text,
   TextInput,
@@ -21,50 +21,39 @@ import { Screen } from '@/components/Screen';
 import { Surface } from '@/components/Surface';
 import { createPlace, setTags } from '@/db/repository';
 import { reverseGeocode, type PlaceSuggestion } from '@/services/nominatim';
-import { findCampsitesNear, formatDistance, type CampsiteSuggestion } from '@/services/overpass';
-import { runSearch, type SearchUpdate } from '@/services/campsiteSearch';
+import { formatDistance, type CampsiteSuggestion } from '@/services/overpass';
+import { EMPTY_SEARCH, runSearch, searchAround, type SearchUpdate } from '@/services/campsiteSearch';
 import { colors, fonts, radius, spacing, type as typography } from '@/theme';
-
-type Row =
-  | { kind: 'campsite'; item: CampsiteSuggestion; distance: boolean }
-  | { kind: 'place'; item: PlaceSuggestion };
-
-type Section = { title: string; hint?: string; data: Row[] };
 
 /** Wartezeit nach dem letzten Tastendruck, bevor gesucht wird. */
 const DEBOUNCE_MS = 450;
-
-const EMPTY_RESULT: SearchUpdate = {
-  campsites: [],
-  places: [],
-  nearby: [],
-  nearbyLabel: null,
-  loading: false,
-  placesFailed: false,
-  nearbyFailed: false,
-};
+/** Radien für "weiter weg suchen". */
+const WIDER_RADII = [150_000];
 
 /**
  * Neuen Campingplatz anlegen.
  *
- * Die Suche kombiniert zwei Quellen: Nominatim liefert Orte, Adressen und
- * namentliche Treffer, Overpass alle Campingplätze rund um den besten
- * Treffer - auch die kleinen und namenlosen. Beide melden sich einzeln,
- * damit die Liste nicht auf die langsamere Quelle wartet.
+ * Die Liste zeigt ausschließlich Campingplätze - Orte tauchen nur als
+ * Suchmittelpunkt im Hinweis auf. Findet keine Quelle den Platz, lässt er
+ * sich unten von Hand eintragen.
  */
 export default function NewPlaceScreen() {
   const [name, setName] = useState('');
   const [selected, setSelected] = useState<PlaceSuggestion | null>(null);
-  const [result, setResult] = useState<SearchUpdate>(EMPTY_RESULT);
+  const [result, setResult] = useState<SearchUpdate>(EMPTY_SEARCH);
 
-  /** Gesetzt, solange die Umkreisliste eines angetippten Ortes läuft. */
-  const [aroundPlace, setAroundPlace] = useState<{
+  /** Ergebnisse einer reinen Umkreissuche (GPS oder "weiter weg"). */
+  const [aroundMode, setAroundMode] = useState<{
     label: string;
+    lat: number;
+    lon: number;
     results: CampsiteSuggestion[];
     loading: boolean;
     failed: boolean;
+    wide: boolean;
   } | null>(null);
 
+  const [manualOpen, setManualOpen] = useState(false);
   const [manualPin, setManualPin] = useState<{ lat: number; lon: number } | null>(null);
   const [locating, setLocating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -72,14 +61,13 @@ export default function NewPlaceScreen() {
   const cancelRef = useRef<(() => void) | null>(null);
   const aroundAbort = useRef<AbortController | null>(null);
 
-  // Suche während des Tippens, entprellt.
   useEffect(() => {
-    if (selected || aroundPlace) return;
+    if (selected || aroundMode) return;
 
     const query = name.trim();
     if (query.length < 2) {
       cancelRef.current?.();
-      setResult(EMPTY_RESULT);
+      setResult(EMPTY_SEARCH);
       return;
     }
 
@@ -89,7 +77,7 @@ export default function NewPlaceScreen() {
     }, DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
-  }, [name, selected, aroundPlace]);
+  }, [name, selected, aroundMode]);
 
   useEffect(
     () => () => {
@@ -99,25 +87,31 @@ export default function NewPlaceScreen() {
     [],
   );
 
-  /** Alle Campingplätze rund um einen Punkt laden. */
-  const loadAround = useCallback(async (label: string, lat: number, lon: number) => {
-    Keyboard.dismiss();
-    cancelRef.current?.();
-    aroundAbort.current?.abort();
+  /** Reine Umkreissuche um einen Punkt. */
+  const loadAround = useCallback(
+    async (label: string, lat: number, lon: number, wide = false) => {
+      Keyboard.dismiss();
+      cancelRef.current?.();
+      aroundAbort.current?.abort();
 
-    const controller = new AbortController();
-    aroundAbort.current = controller;
-    setAroundPlace({ label, results: [], loading: true, failed: false });
+      const controller = new AbortController();
+      aroundAbort.current = controller;
+      setAroundMode({ label, lat, lon, results: [], loading: true, failed: false, wide });
 
-    try {
-      const results = await findCampsitesNear(lat, lon, { signal: controller.signal });
-      if (controller.signal.aborted) return;
-      setAroundPlace({ label, results, loading: false, failed: false });
-    } catch {
-      if (controller.signal.aborted) return;
-      setAroundPlace({ label, results: [], loading: false, failed: true });
-    }
-  }, []);
+      try {
+        const results = await searchAround(lat, lon, {
+          signal: controller.signal,
+          radiiMeters: wide ? WIDER_RADII : undefined,
+        });
+        if (controller.signal.aborted) return;
+        setAroundMode({ label, lat, lon, results, loading: false, failed: false, wide });
+      } catch {
+        if (controller.signal.aborted) return;
+        setAroundMode({ label, lat, lon, results: [], loading: false, failed: true, wide });
+      }
+    },
+    [],
+  );
 
   const useCurrentLocation = async () => {
     setLocating(true);
@@ -146,7 +140,7 @@ export default function NewPlaceScreen() {
     if (!manualPin) return;
     const fallback: PlaceSuggestion = {
       sourceId: '',
-      name: name.trim() || 'Eigener Standort',
+      name: name.trim() || 'Eigener Platz',
       address: '',
       lat: manualPin.lat,
       lon: manualPin.lon,
@@ -154,8 +148,9 @@ export default function NewPlaceScreen() {
       kind: null,
     };
     setSelected(fallback);
+    setManualOpen(false);
     setManualPin(null);
-    setAroundPlace(null);
+    setAroundMode(null);
 
     try {
       const found = await reverseGeocode(manualPin.lat, manualPin.lon);
@@ -165,11 +160,32 @@ export default function NewPlaceScreen() {
     }
   };
 
+  /** Platz ganz ohne Standort anlegen - der letzte Ausweg. */
+  const useWithoutLocation = () => {
+    if (!name.trim()) {
+      Alert.alert('Name fehlt', 'Gib dem Platz zuerst einen Namen.');
+      return;
+    }
+    setSelected({
+      sourceId: '',
+      name: name.trim(),
+      address: '',
+      lat: null as unknown as number,
+      lon: null as unknown as number,
+      country: null,
+      kind: null,
+    });
+    setManualOpen(false);
+    setAroundMode(null);
+    Keyboard.dismiss();
+  };
+
   const choose = (suggestion: PlaceSuggestion) => {
     cancelRef.current?.();
     aroundAbort.current?.abort();
     setSelected(suggestion);
-    setAroundPlace(null);
+    setAroundMode(null);
+    setManualOpen(false);
     setManualPin(null);
     if (!name.trim() || isGenericName(name)) setName(suggestion.name);
     Keyboard.dismiss();
@@ -177,7 +193,7 @@ export default function NewPlaceScreen() {
 
   const backToSearch = () => {
     aroundAbort.current?.abort();
-    setAroundPlace(null);
+    setAroundMode(null);
   };
 
   const save = async () => {
@@ -208,71 +224,61 @@ export default function NewPlaceScreen() {
     }
   };
 
-  const sections = buildSections(result, aroundPlace);
-  const busy = aroundPlace ? aroundPlace.loading : result.loading;
-  const empty = sections.every((s) => s.data.length === 0);
+  const list = aroundMode ? aroundMode.results : result.campsites;
+  const busy = aroundMode ? aroundMode.loading : result.loading;
+  const query = name.trim();
+  const searched = aroundMode !== null || query.length >= 2;
 
   return (
     <Screen>
       <AppHeader title="Neuer Platz" subtitle="Schritt 1 von 2" showBack />
 
-      <SectionList
-        sections={selected ? [] : sections}
-        keyExtractor={(row, index) => `${row.item.sourceId || 'x'}-${index}`}
+      <FlatList
+        data={selected ? [] : list}
+        keyExtractor={(item, index) => `${item.sourceId || 'x'}-${index}`}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.content}
-        stickySectionHeadersEnabled={false}
         ListHeaderComponent={
           <SearchHeader
             name={name}
             onChangeName={(value) => {
               setName(value);
               if (selected) setSelected(null);
-              if (aroundPlace) backToSearch();
+              if (aroundMode) backToSearch();
+              if (manualOpen) setManualOpen(false);
             }}
             busy={busy}
             selected={selected}
             onClearSelected={() => setSelected(null)}
-            aroundLabel={aroundPlace?.label ?? null}
+            aroundLabel={aroundMode?.label ?? null}
             onBackToSearch={backToSearch}
             locating={locating}
             onUseCurrentLocation={useCurrentLocation}
             result={result}
-            aroundFailed={aroundPlace?.failed ?? false}
-            queryLength={name.trim().length}
-            empty={empty}
+            aroundFailed={aroundMode?.failed ?? false}
+            count={list.length}
+            searched={searched}
+            queryLength={query.length}
           />
         }
-        renderSectionHeader={({ section }) =>
-          section.data.length === 0 ? null : (
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>{section.title.toUpperCase()}</Text>
-              {section.hint ? <Text style={styles.sectionHint}>{section.hint}</Text> : null}
-            </View>
-          )
-        }
-        renderItem={({ item: row }) =>
-          row.kind === 'campsite' ? (
-            <CampsiteRow
-              item={row.item}
-              showDistance={row.distance}
-              onPress={() => choose(row.item)}
-            />
-          ) : (
-            <PlaceRow
-              item={row.item}
-              onPress={() => choose(row.item)}
-              onShowNearby={() => loadAround(row.item.name, row.item.lat, row.item.lon)}
-            />
-          )
-        }
+        renderItem={({ item }) => <CampsiteRow item={item} onPress={() => choose(item)} />}
         ListFooterComponent={
           selected ? null : (
-            <ManualFallback
-              visible={name.trim().length >= 2 && !busy && empty}
+            <NotFoundBlock
+              // Der Ausweg ist immer erreichbar - auch wenn Treffer da sind,
+              // aber der eigene Platz nicht dabei ist.
+              visible={searched && !busy}
+              hadResults={list.length > 0}
+              open={manualOpen}
+              onToggle={() => setManualOpen((v) => !v)}
               pin={manualPin}
               onSetPin={setManualPin}
-              onConfirm={useManualPin}
+              onConfirmPin={useManualPin}
+              onWithoutLocation={useWithoutLocation}
+              canWidenSearch={Boolean(aroundMode) && !aroundMode?.wide}
+              onWidenSearch={() =>
+                aroundMode && loadAround(aroundMode.label, aroundMode.lat, aroundMode.lon, true)
+              }
             />
           )
         }
@@ -291,57 +297,6 @@ export default function NewPlaceScreen() {
       </View>
     </Screen>
   );
-}
-
-/** Gruppiert die Treffer in die Abschnitte der Liste. */
-export function buildSections(
-  result: SearchUpdate,
-  aroundPlace: { label: string; results: CampsiteSuggestion[] } | null,
-): Section[] {
-  if (aroundPlace) {
-    return [
-      {
-        title: `Campingplätze rund um ${aroundPlace.label}`,
-        hint:
-          aroundPlace.results.length > 0
-            ? `${aroundPlace.results.length} ${aroundPlace.results.length === 1 ? 'Platz' : 'Plätze'} gefunden`
-            : undefined,
-        data: aroundPlace.results.map((item) => ({
-          kind: 'campsite' as const,
-          item,
-          distance: true,
-        })),
-      },
-    ];
-  }
-
-  const sections: Section[] = [];
-  if (result.campsites.length > 0) {
-    sections.push({
-      title: 'Campingplätze',
-      data: result.campsites.map((item) => ({
-        kind: 'campsite' as const,
-        item,
-        distance: false,
-      })),
-    });
-  }
-  if (result.nearby.length > 0) {
-    sections.push({
-      title: result.nearbyLabel
-        ? `Weitere Plätze rund um ${result.nearbyLabel}`
-        : 'Weitere Plätze in der Umgebung',
-      data: result.nearby.map((item) => ({ kind: 'campsite' as const, item, distance: true })),
-    });
-  }
-  if (result.places.length > 0) {
-    sections.push({
-      title: 'Orte & Adressen',
-      hint: 'Ort antippen zeigt alle Campingplätze im Umkreis',
-      data: result.places.map((item) => ({ kind: 'place' as const, item })),
-    });
-  }
-  return sections;
 }
 
 /**
@@ -375,8 +330,9 @@ type HeaderProps = {
   onUseCurrentLocation: () => void;
   result: SearchUpdate;
   aroundFailed: boolean;
+  count: number;
+  searched: boolean;
   queryLength: number;
-  empty: boolean;
 };
 
 function SearchHeader({
@@ -391,9 +347,12 @@ function SearchHeader({
   onUseCurrentLocation,
   result,
   aroundFailed,
+  count,
+  searched,
   queryLength,
-  empty,
 }: HeaderProps) {
+  const hasCoords = selected && Number.isFinite(selected.lat) && Number.isFinite(selected.lon);
+
   return (
     <View style={styles.headerBlock}>
       <Text style={styles.label}>WIE HEISST DER PLATZ?</Text>
@@ -401,7 +360,7 @@ function SearchHeader({
         <TextInput
           value={name}
           onChangeText={onChangeName}
-          placeholder="Name oder Ort, z. B. Surwold"
+          placeholder="Name oder Ort, z. B. Timmeler Meer"
           placeholderTextColor={colors.inkFaint}
           style={styles.input}
           autoFocus
@@ -415,23 +374,31 @@ function SearchHeader({
       {selected ? (
         <View style={styles.selectedBlock}>
           <View style={styles.selectedHeader}>
-            <Ionicons name="location" size={16} color={colors.red} />
-            <Text style={styles.selectedTitle}>Standort übernommen</Text>
-            <Pressable onPress={onClearSelected} hitSlop={8} accessibilityLabel="Standort entfernen">
+            <Ionicons name="checkmark-circle" size={16} color={colors.mint} />
+            <Text style={styles.selectedTitle}>
+              {hasCoords ? 'Standort übernommen' : 'Platz ohne Standort'}
+            </Text>
+            <Pressable onPress={onClearSelected} hitSlop={8} accessibilityLabel="Auswahl aufheben">
               <Ionicons name="close-circle" size={19} color={colors.inkFaint} />
             </Pressable>
           </View>
           {selected.address ? (
             <Text style={styles.selectedAddress}>{selected.address}</Text>
           ) : null}
-          <MapPreview lat={selected.lat} lon={selected.lon} label={selected.name} height={170} />
+          {hasCoords ? (
+            <MapPreview lat={selected.lat} lon={selected.lon} label={selected.name} height={170} />
+          ) : (
+            <Text style={styles.hint}>
+              Du kannst den Standort später jederzeit ergänzen – tippe im Platz auf „Bearbeiten".
+            </Text>
+          )}
         </View>
       ) : (
         <>
           {aroundLabel ? (
             <Pressable style={styles.backRow} onPress={onBackToSearch} accessibilityRole="button">
               <Ionicons name="arrow-back" size={16} color={colors.red} />
-              <Text style={styles.backText}>Zurück zur Suche</Text>
+              <Text style={styles.backText}>Zurück zur Namenssuche</Text>
             </Pressable>
           ) : (
             <Pressable
@@ -458,8 +425,9 @@ function SearchHeader({
             aroundLabel={aroundLabel}
             result={result}
             aroundFailed={aroundFailed}
+            count={count}
+            searched={searched}
             queryLength={queryLength}
-            empty={empty}
           />
         </>
       )}
@@ -467,42 +435,53 @@ function SearchHeader({
   );
 }
 
-/** Eine Zeile, die immer sagt, was die Suche gerade tut. */
+/** Sagt in einer Zeile, was die Suche gerade tut oder gefunden hat. */
 function StatusLine({
   busy,
   aroundLabel,
   result,
   aroundFailed,
+  count,
+  searched,
   queryLength,
-  empty,
 }: {
   busy: boolean;
   aroundLabel: string | null;
   result: SearchUpdate;
   aroundFailed: boolean;
+  count: number;
+  searched: boolean;
   queryLength: number;
-  empty: boolean;
 }) {
   if (busy) {
     return (
       <View style={styles.statusRow}>
         <ActivityIndicator size="small" color={colors.red} />
         <Text style={styles.hint}>
-          {aroundLabel ? `Campingplätze rund um ${aroundLabel} werden geladen …` : 'Suche läuft …'}
+          {aroundLabel
+            ? `Plätze rund um ${aroundLabel} werden gesucht …`
+            : count > 0
+              ? 'Es wird noch in der Umgebung gesucht …'
+              : 'Suche läuft …'}
         </Text>
       </View>
     );
   }
 
-  if (aroundFailed) {
+  if (aroundFailed || (result.nameFailed && result.nearbyFailed)) {
     return (
       <Text style={styles.error}>
-        Die Campingplatz-Suche ist gerade nicht erreichbar. Versuch es in einem Moment noch einmal.
+        Die Suche ist gerade nicht erreichbar. Prüfe die Internetverbindung – oder trag den Platz
+        unten von Hand ein.
       </Text>
     );
   }
 
-  if (queryLength < 2) {
+  if (queryLength > 0 && queryLength < 2) {
+    return <Text style={styles.hint}>Noch ein Buchstabe, dann geht die Suche los.</Text>;
+  }
+
+  if (!searched) {
     return (
       <Text style={styles.hint}>
         Tipp den Namen des Platzes ein – oder einfach den Ort, dann zeigt dir die App alle
@@ -511,34 +490,20 @@ function StatusLine({
     );
   }
 
-  if (result.placesFailed && empty) {
-    return (
-      <Text style={styles.error}>
-        Keine Verbindung zur Ortssuche. Du kannst den Platz auch ohne Standort speichern.
-      </Text>
-    );
-  }
-
-  if (result.nearbyFailed && !empty) {
+  if (count > 0) {
+    const where = aroundLabel ?? result.anchorLabel;
     return (
       <Text style={styles.hint}>
-        Die Umgebungssuche war nicht erreichbar – hier sind nur die direkten Namenstreffer.
+        {count} {count === 1 ? 'Platz' : 'Plätze'} gefunden
+        {where ? ` – gesucht wurde auch rund um ${where}` : ''}
       </Text>
     );
   }
 
-  return null;
+  return <Text style={styles.hint}>Kein Campingplatz gefunden.</Text>;
 }
 
-function CampsiteRow({
-  item,
-  showDistance,
-  onPress,
-}: {
-  item: CampsiteSuggestion;
-  showDistance: boolean;
-  onPress: () => void;
-}) {
+function CampsiteRow({ item, onPress }: { item: CampsiteSuggestion; onPress: () => void }) {
   const badges: string[] = [];
   if (item.features.caravans === true) badges.push('Wohnwagen');
   if (item.features.power === true) badges.push('Strom');
@@ -552,7 +517,7 @@ function CampsiteRow({
       accessibilityRole="button"
       accessibilityLabel={`${item.name}${item.address ? `, ${item.address}` : ''}`}
     >
-      <View style={[styles.rowIcon, styles.rowIconCamp]}>
+      <View style={styles.rowIcon}>
         <Ionicons
           name={item.kind === 'caravan_site' ? 'bus-outline' : 'bonfire-outline'}
           size={17}
@@ -560,7 +525,7 @@ function CampsiteRow({
         />
       </View>
       <View style={styles.rowText}>
-        <Text style={styles.rowName} numberOfLines={1}>
+        <Text style={styles.rowName} numberOfLines={2}>
           {item.name}
         </Text>
         {item.address ? (
@@ -574,93 +539,100 @@ function CampsiteRow({
           </Text>
         )}
       </View>
-      {showDistance && Number.isFinite(item.distanceMeters) && (
+      {Number.isFinite(item.distanceMeters) && (
         <Text style={styles.distance}>{formatDistance(item.distanceMeters)}</Text>
       )}
     </Pressable>
   );
 }
 
-function PlaceRow({
-  item,
-  onPress,
-  onShowNearby,
-}: {
-  item: PlaceSuggestion;
-  onPress: () => void;
-  onShowNearby: () => void;
-}) {
-  return (
-    <Pressable
-      style={styles.row}
-      onPress={onShowNearby}
-      accessibilityRole="button"
-      accessibilityLabel={`${item.name}. Campingplätze im Umkreis anzeigen`}
-    >
-      <View style={styles.rowIcon}>
-        <Ionicons name="location-outline" size={17} color={colors.inkSoft} />
-      </View>
-      <View style={styles.rowText}>
-        <Text style={styles.rowName} numberOfLines={1}>
-          {item.name}
-        </Text>
-        <Text style={styles.rowSub} numberOfLines={2}>
-          {item.address}
-        </Text>
-      </View>
-      <Pressable
-        onPress={onPress}
-        hitSlop={10}
-        accessibilityRole="button"
-        accessibilityLabel="Diesen Ort direkt übernehmen"
-        style={styles.rowTake}
-      >
-        <Ionicons name="checkmark-circle-outline" size={21} color={colors.inkFaint} />
-      </Pressable>
-    </Pressable>
-  );
-}
-
-function ManualFallback({
+/**
+ * Der Ausweg, wenn der eigene Platz nicht in der Liste steht - egal ob die
+ * Suche leer blieb oder nur den falschen Platz gefunden hat.
+ */
+function NotFoundBlock({
   visible,
+  hadResults,
+  open,
+  onToggle,
   pin,
   onSetPin,
-  onConfirm,
+  onConfirmPin,
+  onWithoutLocation,
+  canWidenSearch,
+  onWidenSearch,
 }: {
   visible: boolean;
+  hadResults: boolean;
+  open: boolean;
+  onToggle: () => void;
   pin: { lat: number; lon: number } | null;
   onSetPin: (pin: { lat: number; lon: number }) => void;
-  onConfirm: () => void;
+  onConfirmPin: () => void;
+  onWithoutLocation: () => void;
+  canWidenSearch: boolean;
+  onWidenSearch: () => void;
 }) {
   if (!visible) return null;
 
-  // Startpunkt der Karte: Mitte Deutschlands, wenn noch nichts gesetzt ist.
   const lat = pin?.lat ?? 51.2;
   const lon = pin?.lon ?? 9.5;
 
   return (
-    <View style={styles.fallback}>
-      <Text style={styles.fallbackTitle}>Nichts gefunden?</Text>
-      <Text style={styles.hint}>
-        Manche kleinen Plätze fehlen in OpenStreetMap. Tippe den Standort einfach selbst auf der
-        Karte an – zoomen und verschieben geht mit zwei Fingern.
-      </Text>
-      <MapPreview
-        lat={lat}
-        lon={lon}
-        label="Standort wählen"
-        height={230}
-        zoom={pin ? 14 : 5}
-        onPick={(pickedLat, pickedLon) => onSetPin({ lat: pickedLat, lon: pickedLon })}
-      />
-      <RetroButton
-        label={pin ? 'Diesen Standort übernehmen' : 'Erst auf der Karte antippen'}
-        onPress={onConfirm}
-        variant="secondary"
-        icon="pin"
-        fullWidth
-        disabled={!pin}
-      />
+    <View style={styles.notFound}>
+      {canWidenSearch && (
+        <Pressable style={styles.widenRow} onPress={onWidenSearch} accessibilityRole="button">
+          <Ionicons name="resize-outline" size={17} color={colors.red} />
+          <Text style={styles.widenText}>Weiter weg suchen</Text>
+        </Pressable>
+      )}
+
+      <Pressable
+        style={styles.notFoundHeader}
+        onPress={onToggle}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+      >
+        <Ionicons name="add-circle-outline" size={20} color={colors.red} />
+        <View style={styles.rowText}>
+          <Text style={styles.notFoundTitle}>
+            {hadResults ? 'Dein Platz ist nicht dabei?' : 'Nicht gefunden?'}
+          </Text>
+          <Text style={styles.rowSub}>Hier kannst du den Platz von Hand hinzufügen</Text>
+        </View>
+        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color={colors.inkSoft} />
+      </Pressable>
+
+      {open && (
+        <View style={styles.manualBody}>
+          <Text style={styles.hint}>
+            Tippe den Standort auf der Karte an – zoomen und verschieben geht mit zwei Fingern. Die
+            Adresse trägt die App dann selbst nach.
+          </Text>
+          <MapPreview
+            lat={lat}
+            lon={lon}
+            label="Standort wählen"
+            height={250}
+            zoom={pin ? 14 : 5}
+            onPick={(pickedLat, pickedLon) => onSetPin({ lat: pickedLat, lon: pickedLon })}
+          />
+          <RetroButton
+            label={pin ? 'Diesen Standort übernehmen' : 'Erst auf der Karte antippen'}
+            onPress={onConfirmPin}
+            icon="pin"
+            fullWidth
+            disabled={!pin}
+          />
+          <RetroButton
+            label="Ohne Standort anlegen"
+            onPress={onWithoutLocation}
+            variant="secondary"
+            icon="create-outline"
+            fullWidth
+          />
+        </View>
+      )}
     </View>
   );
 }
@@ -743,25 +715,11 @@ const styles = StyleSheet.create({
   selectedTitle: {
     ...typography.label,
     flex: 1,
-    color: colors.red,
+    color: colors.ink,
   },
   selectedAddress: {
     ...typography.caption,
     color: colors.inkSoft,
-  },
-  sectionHeader: {
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.sm,
-  },
-  sectionTitle: {
-    ...typography.label,
-    color: colors.inkSoft,
-  },
-  sectionHint: {
-    ...typography.caption,
-    fontSize: 11,
-    color: colors.inkFaint,
-    marginTop: 2,
   },
   row: {
     flexDirection: 'row',
@@ -772,18 +730,14 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.line,
   },
   rowIcon: {
-    width: 34,
-    height: 34,
+    width: 36,
+    height: 36,
     borderRadius: radius.sm,
-    borderWidth: 1.5,
-    borderColor: colors.line,
-    backgroundColor: colors.paper,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  rowIconCamp: {
+    borderWidth: 2,
     borderColor: colors.ink,
     backgroundColor: colors.redWash,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   rowText: {
     flex: 1,
@@ -805,21 +759,50 @@ const styles = StyleSheet.create({
     color: colors.mint,
     marginTop: 2,
   },
-  rowTake: {
-    padding: 2,
-  },
   distance: {
     fontFamily: fonts.monoBold,
     fontSize: 11,
     color: colors.red,
   },
-  fallback: {
+  notFound: {
+    marginTop: spacing.lg,
     gap: spacing.md,
-    paddingTop: spacing.xl,
   },
-  fallbackTitle: {
+  widenRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    borderColor: colors.line,
+    backgroundColor: colors.paper,
+  },
+  widenText: {
+    ...typography.bodyStrong,
+    fontSize: 14,
+    color: colors.red,
+  },
+  notFoundHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: colors.line,
+    backgroundColor: colors.paper,
+  },
+  notFoundTitle: {
     ...typography.h3,
+    fontSize: 15,
     color: colors.ink,
+  },
+  manualBody: {
+    gap: spacing.md,
   },
   footer: {
     padding: spacing.lg,

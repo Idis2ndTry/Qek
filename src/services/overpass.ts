@@ -19,6 +19,8 @@ const ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
   'https://overpass.private.coffee/api/interpreter',
+  'https://overpass.osm.jp/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
 ];
 
 const MIN_REQUEST_GAP_MS = 1200;
@@ -153,12 +155,26 @@ async function runQuery(query: string, signal?: AbortSignal): Promise<OverpassEl
     signal?.addEventListener('abort', onAbort);
 
     try {
-      const response = await fetch(endpoint, {
+      // Erst POST (kein Längenlimit), bei Ablehnung GET - manche Netze und
+      // Mirrors lassen nur eine der beiden Varianten durch.
+      let response = await fetch(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Accept: 'application/json',
+        },
         body: `data=${encodeURIComponent(query)}`,
         signal: timeout.signal,
       });
+
+      if (!response.ok && (response.status === 400 || response.status === 405)) {
+        response = await fetch(`${endpoint}?data=${encodeURIComponent(query)}`, {
+          method: 'GET',
+          headers: { Accept: 'application/json' },
+          signal: timeout.signal,
+        });
+      }
+
       if (!response.ok) {
         lastError = new Error(`Overpass ${response.status}`);
         continue;
@@ -178,11 +194,28 @@ async function runQuery(query: string, signal?: AbortSignal): Promise<OverpassEl
   throw lastError ?? new Error('Overpass nicht erreichbar');
 }
 
-/** Baut die Umkreis-Abfrage. Ausgelagert, damit sie testbar ist. */
+/**
+ * Baut die Umkreis-Abfrage.
+ *
+ * Bewusst in der ausgeschriebenen Form mit einzelnen node/way/relation-
+ * Zeilen und ohne Regex: Das ist die Syntax, die jede Overpass-Version und
+ * jeder Mirror versteht. Kurzformen wie `nwr` und Wert-Regex sind zwar
+ * bequemer, werden aber nicht überall gleich unterstützt.
+ */
 export function buildAroundQuery(lat: number, lon: number, radiusMeters: number): string {
+  const at = `around:${Math.round(radiusMeters)},${lat.toFixed(6)},${lon.toFixed(6)}`;
+  const kinds = ['camp_site', 'caravan_site'];
+  const lines = kinds
+    .flatMap((kind) =>
+      ['node', 'way', 'relation'].map((type) => `  ${type}["tourism"="${kind}"](${at});`),
+    )
+    .join('\n');
+
   return `[out:json][timeout:${QUERY_TIMEOUT_S}];
-nwr["tourism"~"^(camp_site|caravan_site)$"](around:${Math.round(radiusMeters)},${lat.toFixed(6)},${lon.toFixed(6)});
-out center 200;`;
+(
+${lines}
+);
+out center;`;
 }
 
 /**

@@ -1,7 +1,14 @@
 import { strict as assert } from 'node:assert';
 import { test, mock, afterEach, beforeEach } from 'node:test';
 
-import { toSuggestion, isCampsiteKind, searchPlaces, resetRateLimit as resetNominatim } from '../nominatim';
+import {
+  toSuggestion,
+  isCampsiteKind,
+  searchPlaces,
+  campingVariants,
+  mentionsCamping,
+  resetRateLimit as resetNominatim,
+} from '../nominatim';
 import {
   buildAroundQuery,
   dedupeByLocation,
@@ -12,7 +19,7 @@ import {
   resetRateLimit as resetOverpass,
   type CampsiteSuggestion,
 } from '../overpass';
-import { runSearch } from '../campsiteSearch';
+import { runSearch, mergeCampsites, pickAnchor, asCampsite } from '../campsiteSearch';
 
 /** Antwort-Attrappe für fetch, damit die Tests ohne Netz laufen. */
 type Route = { match: (url: string, init?: RequestInit) => boolean; body: unknown; status?: number; delayMs?: number };
@@ -233,84 +240,209 @@ test('distanceMeters rechnet plausibel', () => {
   assert.ok(d > 15_000 && d < 25_000, `unerwartet: ${Math.round(d)} m`);
 });
 
+// ------------------------------------------------- Suchbegriff-Varianten
+
+test('mentionsCamping erkennt, wenn schon nach einem Platz gefragt wird', () => {
+  assert.equal(mentionsCamping('Campingplatz Timmeler Meer'), true);
+  assert.equal(mentionsCamping('camping de bantus'), true);
+  assert.equal(mentionsCamping('Stellplatz Sögel'), true);
+  assert.equal(mentionsCamping('Timmeler Meer'), false);
+  assert.equal(mentionsCamping('Surwold'), false);
+});
+
+test('campingVariants ergänzt genau die Schreibweise, die in OSM steht', () => {
+  // Der Platz heißt in der Karte "Campingplatz Timmeler Meer" - wer nur
+  // "Timmeler Meer" tippt, bekommt sonst den See.
+  assert.deepEqual(campingVariants('Timmeler Meer'), [
+    'Campingplatz Timmeler Meer',
+    'Camping Timmeler Meer',
+  ]);
+});
+
+test('campingVariants verzichtet auf Zusätze, wenn das Wort schon drinsteht', () => {
+  assert.deepEqual(campingVariants('Campingplatz Timmeler Meer'), []);
+  assert.deepEqual(campingVariants(''), []);
+});
+
+// --------------------------------------------------------- Zusammenführen
+
+const BASE_FEATURES = {
+  caravans: null, tents: null, power: null, shower: null, toilets: null,
+  drinkingWater: null, dogs: null, openAllYear: null, website: null, phone: null,
+};
+
+function campsite(over: Partial<CampsiteSuggestion>): CampsiteSuggestion {
+  return {
+    sourceId: '', name: 'Platz', address: '', lat: 53.4, lon: 7.5, country: null,
+    kind: 'camp_site', distanceMeters: Number.NaN, features: { ...BASE_FEATURES }, ...over,
+  } as CampsiteSuggestion;
+}
+
+test('mergeCampsites zeigt jeden Platz nur einmal, Namenstreffer zuerst', () => {
+  const named = [campsite({ sourceId: 'osm:way/2', name: 'Campingplatz Timmeler Meer' })];
+  const nearby = [
+    campsite({ sourceId: 'osm:node/9', name: 'Anderer Platz', lat: 53.5, lon: 7.6, distanceMeters: 9000 }),
+    campsite({ sourceId: 'osm:way/2', name: 'Campingplatz Timmeler Meer', distanceMeters: 400 }),
+  ];
+
+  const merged = mergeCampsites(named, nearby);
+  assert.equal(merged.length, 2);
+  assert.equal(merged[0].name, 'Campingplatz Timmeler Meer', 'Namenstreffer bleibt oben');
+  assert.equal(merged[0].distanceMeters, 400, 'Entfernung aus der Umkreissuche wird übernommen');
+});
+
+test('mergeCampsites erkennt denselben Platz auch ohne gleiche Kennung', () => {
+  const merged = mergeCampsites(
+    [campsite({ sourceId: 'osm:way/2', name: 'Camping Timmeler Meer', lat: 53.4000, lon: 7.5000 })],
+    [campsite({ sourceId: 'osm:node/77', name: 'Campingplatz Timmeler Meer', lat: 53.4008, lon: 7.5010, distanceMeters: 200 })],
+  );
+  assert.equal(merged.length, 1, 'Punkt und Fläche desselben Platzes sind ein Eintrag');
+});
+
+test('pickAnchor bevorzugt einen Ort oder See als Suchmittelpunkt', () => {
+  const anchor = pickAnchor([
+    { sourceId: 'a', name: 'Musterstraße 1', address: '', lat: 1, lon: 1, country: null, kind: 'house' },
+    { sourceId: 'b', name: 'Timmeler Meer', address: '', lat: 53.4, lon: 7.5, country: null, kind: 'water' },
+  ]);
+  assert.equal(anchor?.name, 'Timmeler Meer');
+});
+
 // ------------------------------------------------------- Zusammenspiel
 
-test('runSearch zeigt Nominatim-Treffer, bevor Overpass fertig ist', async () => {
-  mockFetch([
-    {
-      match: (url) => url.includes('nominatim'),
-      body: [{ osm_type: 'node', osm_id: 1, name: 'Surwold', display_name: 'Surwold, Emsland', lat: '52.98', lon: '7.55', type: 'village' }],
-    },
-    {
-      match: (url) => url.includes('overpass'),
-      delayMs: 300,
-      body: { elements: [{ type: 'way', id: 5, center: { lat: 52.99, lon: 7.56 }, tags: { tourism: 'camp_site', name: 'Campingplatz de Bantus' } }] },
-    },
-  ]);
+/** Baut eine fetch-Attrappe, die je nach Suchbegriff antwortet. */
+function routeByQuery(config: {
+  nominatim: (q: string) => unknown[];
+  overpass?: unknown[];
+  overpassDelayMs?: number;
+  overpassFails?: boolean;
+}) {
+  (globalThis as { fetch: unknown }).fetch = async (input: unknown, init?: RequestInit) => {
+    const url = String(input);
+    if (url.includes('nominatim')) {
+      const q = decodeURIComponent(new URL(url).searchParams.get('q') ?? '');
+      return { ok: true, status: 200, json: async () => config.nominatim(q) } as Response;
+    }
+    if (config.overpassFails) throw new Error('Netzwerk weg');
+    if (config.overpassDelayMs) await new Promise((r) => setTimeout(r, config.overpassDelayMs));
+    return { ok: true, status: 200, json: async () => ({ elements: config.overpass ?? [] }) } as Response;
+  };
+}
 
-  const updates: { places: number; nearby: number; loading: boolean }[] = [];
-  runSearch('Surwold', (u) => updates.push({ places: u.places.length, nearby: u.nearby.length, loading: u.loading }));
+test('findet den Platz auch bei Eingabe nur des Ortsnamens', async () => {
+  // Genau der Fall aus der Praxis: "Timmeler Meer" liefert bei Nominatim
+  // nur den See, "Campingplatz Timmeler Meer" den Platz.
+  routeByQuery({
+    nominatim: (q) =>
+      q.toLowerCase().startsWith('campingplatz')
+        ? [{ osm_type: 'way', osm_id: 2, name: 'Campingplatz Timmeler Meer', display_name: 'Campingplatz Timmeler Meer, Großefehn', lat: '53.4210', lon: '7.5330', type: 'camp_site' }]
+        : [{ osm_type: 'node', osm_id: 1, name: 'Timmeler Meer', display_name: 'Timmeler Meer, Großefehn', lat: '53.4180', lon: '7.5300', type: 'water' }],
+    overpass: [],
+  });
 
-  // Der Zwischenstand mit Ort, aber noch ohne Umkreis-Treffer, ist der
-  // entscheidende Punkt: hier sieht der Nutzer schon etwas.
-  await new Promise((r) => setTimeout(r, 150));
-  const early = updates[updates.length - 1];
-  assert.equal(early.places, 1, 'Ort muss sofort sichtbar sein');
-  assert.equal(early.nearby, 0);
-  assert.equal(early.loading, true);
+  const seen: string[][] = [];
+  runSearch('Timmeler Meer', (u) => seen.push(u.campsites.map((c) => c.name)));
 
-  await new Promise((r) => setTimeout(r, 600));
-  const final = updates[updates.length - 1];
-  assert.equal(final.nearby, 1, 'Umkreis-Treffer muss nachgeliefert werden');
-  assert.equal(final.loading, false);
+  await new Promise((r) => setTimeout(r, 3000));
+  const final = seen[seen.length - 1];
+  assert.ok(
+    final.includes('Campingplatz Timmeler Meer'),
+    `Platz muss ohne "Campingplatz" davor gefunden werden, war: ${JSON.stringify(final)}`,
+  );
 });
 
-test('runSearch zeigt Orte auch dann, wenn Overpass ausfällt', async () => {
-  (globalThis as { fetch: unknown }).fetch = async (url: unknown) => {
-    if (String(url).includes('nominatim')) {
-      return {
-        ok: true, status: 200,
-        json: async () => [{ osm_type: 'node', osm_id: 1, name: 'Surwold', display_name: 'Surwold', lat: '52.98', lon: '7.55', type: 'village' }],
-      } as Response;
-    }
-    throw new Error('Netzwerk weg');
-  };
+test('liefert keine Orte, sondern ausschließlich Campingplätze', async () => {
+  routeByQuery({
+    nominatim: () => [
+      { osm_type: 'node', osm_id: 1, name: 'Surwold', display_name: 'Surwold', lat: '52.98', lon: '7.55', type: 'village' },
+      { osm_type: 'way', osm_id: 2, name: 'Campingplatz de Bantus', display_name: 'Campingplatz de Bantus, Surwold', lat: '52.99', lon: '7.56', type: 'camp_site' },
+    ],
+    overpass: [],
+  });
 
-  const updates: { places: number; nearbyFailed: boolean; loading: boolean }[] = [];
-  runSearch('Surwold', (u) => updates.push({ places: u.places.length, nearbyFailed: u.nearbyFailed, loading: u.loading }));
+  const seen: { name: string; kind: string | null }[][] = [];
+  runSearch('Surwold', (u) => seen.push(u.campsites.map((c) => ({ name: c.name, kind: c.kind }))));
+
+  await new Promise((r) => setTimeout(r, 3000));
+  const final = seen[seen.length - 1];
+  assert.ok(final.every((c) => isCampsiteKind(c.kind)), 'Orte dürfen nicht in der Liste stehen');
+  assert.ok(final.some((c) => c.name === 'Campingplatz de Bantus'));
+});
+
+test('zeigt die Umkreis-Treffer, auch wenn der Name nichts trifft', async () => {
+  // "de Bantus" findet Nominatim nicht - die Umkreissuche muss liefern.
+  routeByQuery({
+    nominatim: (q) =>
+      q.toLowerCase().includes('bantus')
+        ? [{ osm_type: 'node', osm_id: 1, name: 'Bantusweg', display_name: 'Bantusweg, Surwold', lat: '52.98', lon: '7.55', type: 'residential' }]
+        : [],
+    overpass: [
+      { type: 'way', id: 5, center: { lat: 52.99, lon: 7.56 }, tags: { tourism: 'camp_site', name: 'Campingplatz de Bantus', 'addr:city': 'Surwold' } },
+    ],
+  });
+
+  const seen: string[][] = [];
+  runSearch('de Bantus', (u) => seen.push(u.campsites.map((c) => c.name)));
+
+  await new Promise((r) => setTimeout(r, 3500));
+  assert.ok(
+    seen[seen.length - 1].includes('Campingplatz de Bantus'),
+    'Umkreissuche muss den Platz nachliefern',
+  );
+});
+
+test('schnelle Treffer erscheinen, bevor die Umkreissuche fertig ist', async () => {
+  routeByQuery({
+    nominatim: () => [
+      { osm_type: 'way', osm_id: 2, name: 'Campingplatz Timmeler Meer', display_name: 'Campingplatz Timmeler Meer', lat: '53.42', lon: '7.53', type: 'camp_site' },
+    ],
+    overpass: [
+      { type: 'node', id: 8, lat: 53.45, lon: 7.60, tags: { tourism: 'camp_site', name: 'Nachbarplatz' } },
+    ],
+    overpassDelayMs: 2500,
+  });
+
+  const seen: { names: string[]; loading: boolean }[] = [];
+  runSearch('Timmeler Meer', (u) => seen.push({ names: u.campsites.map((c) => c.name), loading: u.loading }));
 
   await new Promise((r) => setTimeout(r, 900));
-  const final = updates[updates.length - 1];
-  assert.equal(final.places, 1, 'Nominatim-Treffer dürfen nicht mit Overpass untergehen');
-  assert.equal(final.nearbyFailed, true);
+  const early = seen[seen.length - 1];
+  assert.ok(early.names.includes('Campingplatz Timmeler Meer'), 'Namenstreffer muss sofort da sein');
+  assert.equal(early.loading, true, 'Umkreissuche läuft noch');
+
+  await new Promise((r) => setTimeout(r, 4000));
+  const final = seen[seen.length - 1];
+  assert.ok(final.names.includes('Nachbarplatz'), 'Umkreis-Treffer wird ergänzt');
   assert.equal(final.loading, false);
 });
 
-test('runSearch meldet einen Ausfall der Ortssuche, ohne hängen zu bleiben', async () => {
-  (globalThis as { fetch: unknown }).fetch = async () => {
-    throw new Error('Netzwerk weg');
-  };
+test('ein Ausfall der Umkreissuche kostet nicht die Namenstreffer', async () => {
+  routeByQuery({
+    nominatim: () => [
+      { osm_type: 'way', osm_id: 2, name: 'Campingplatz Timmeler Meer', display_name: 'Campingplatz Timmeler Meer', lat: '53.42', lon: '7.53', type: 'camp_site' },
+    ],
+    overpassFails: true,
+  });
 
-  const updates: { placesFailed: boolean; loading: boolean }[] = [];
-  runSearch('Surwold', (u) => updates.push({ placesFailed: u.placesFailed, loading: u.loading }));
+  const seen: { names: string[]; nearbyFailed: boolean; loading: boolean }[] = [];
+  runSearch('Timmeler Meer', (u) =>
+    seen.push({ names: u.campsites.map((c) => c.name), nearbyFailed: u.nearbyFailed, loading: u.loading }),
+  );
 
-  await new Promise((r) => setTimeout(r, 500));
-  const final = updates[updates.length - 1];
-  assert.equal(final.placesFailed, true);
-  assert.equal(final.loading, false, 'Ladeanzeige darf nicht ewig stehen bleiben');
+  await new Promise((r) => setTimeout(r, 3500));
+  const final = seen[seen.length - 1];
+  assert.ok(final.names.includes('Campingplatz Timmeler Meer'));
+  assert.equal(final.nearbyFailed, true);
+  assert.equal(final.loading, false, 'Ladeanzeige darf nicht stehen bleiben');
 });
 
 test('runSearch bricht sauber ab und meldet danach nichts mehr', async () => {
-  mockFetch([
-    { match: (url) => url.includes('nominatim'), delayMs: 200, body: [] },
-    { match: (url) => url.includes('overpass'), body: { elements: [] } },
-  ]);
+  routeByQuery({ nominatim: () => [], overpass: [], overpassDelayMs: 200 });
 
   let count = 0;
-  const cancel = runSearch('Surwold', () => { count += 1; });
+  const cancel = runSearch('Timmeler Meer', () => { count += 1; });
   const afterStart = count;
   cancel();
 
-  await new Promise((r) => setTimeout(r, 500));
+  await new Promise((r) => setTimeout(r, 2500));
   assert.equal(count, afterStart, 'nach dem Abbruch darf kein Update mehr kommen');
 });

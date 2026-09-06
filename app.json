@@ -1,0 +1,76 @@
+{
+  "expo": {
+    "name": "Qek to the Future",
+    "slug": "qek-to-the-future",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "qek",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#C81E1E"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "de.qektothefuture.reisetagebuch",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Damit du eigene Fotos von deinen Campingplätzen in dein Reisetagebuch legen kannst.",
+        "NSCameraUsageDescription": "Damit du direkt auf dem Platz ein Foto für dein Reisetagebuch aufnehmen kannst.",
+        "NSLocationWhenInUseUsageDescription": "Damit die App den Campingplatz in deiner Nähe automatisch vorschlagen kann."
+      }
+    },
+    "android": {
+      "package": "de.qektothefuture.reisetagebuch",
+      "adaptiveIcon": {
+        "backgroundColor": "#C81E1E",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-sqlite",
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Damit du eigene Fotos von deinen Campingplätzen in dein Reisetagebuch legen kannst.",
+          "cameraPermission": "Damit du direkt auf dem Platz ein Foto für dein Reisetagebuch aufnehmen kannst."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Damit die App den Campingplatz in deiner Nähe automatisch vorschlagen kann."
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#C81E1E",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

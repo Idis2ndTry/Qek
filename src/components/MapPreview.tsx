@@ -13,6 +13,11 @@ type Props = {
   zoom?: number;
   /** Karte reagiert auf Gesten. In Listen besser aus, damit man scrollen kann. */
   interactive?: boolean;
+  /**
+   * Wenn gesetzt, darf in die Karte getippt werden, um einen Standort von
+   * Hand zu setzen - der Ausweg für Plätze, die in OpenStreetMap fehlen.
+   */
+  onPick?: (lat: number, lon: number) => void;
 };
 
 /**
@@ -22,10 +27,22 @@ type Props = {
  * braucht die App keinen Google-Maps-Schlüssel und keine Abrechnung -
  * für den vollständigen Google-Eintrag gibt es daneben den Direktlink.
  */
-export function MapPreview({ lat, lon, label, height = 180, zoom = 14, interactive = false }: Props) {
+export function MapPreview({
+  lat,
+  lon,
+  label,
+  height = 180,
+  zoom = 14,
+  interactive = false,
+  onPick,
+}: Props) {
+  const pickable = Boolean(onPick);
   const html = useMemo(
-    () => (lat !== null && lon !== null ? buildHtml(lat, lon, label, zoom, interactive) : null),
-    [lat, lon, label, zoom, interactive],
+    () =>
+      lat !== null && lon !== null
+        ? buildHtml(lat, lon, label, zoom, interactive || pickable, pickable)
+        : null,
+    [lat, lon, label, zoom, interactive, pickable],
   );
 
   if (html === null) {
@@ -60,8 +77,17 @@ export function MapPreview({ lat, lon, label, height = 180, zoom = 14, interacti
         // Ohne diese Sperre würde ein Tipp in die Karte die WebView
         // navigieren lassen, statt den Platz-Screen zu behalten.
         setSupportMultipleWindows={false}
+        onMessage={(event) => {
+          if (!onPick) return;
+          const [pickedLat, pickedLon] = event.nativeEvent.data.split(',').map(Number);
+          if (Number.isFinite(pickedLat) && Number.isFinite(pickedLon)) {
+            onPick(pickedLat, pickedLon);
+          }
+        }}
       />
-      {!interactive && <View style={StyleSheet.absoluteFill} pointerEvents="box-only" />}
+      {!interactive && !pickable && (
+        <View style={StyleSheet.absoluteFill} pointerEvents="box-only" />
+      )}
     </View>
   );
 }
@@ -72,6 +98,7 @@ function buildHtml(
   label: string,
   zoom: number,
   interactive: boolean,
+  pickable: boolean,
 ): string {
   const safeLabel = label.replace(/[<>&"']/g, '');
   const controls = interactive ? 'true' : 'false';
@@ -90,12 +117,23 @@ function buildHtml(
     background: ${colors.red}; border: 3px solid #fff;
     box-shadow: 0 0 0 2px ${colors.ink};
   }
+  .qek-msg {
+    display:flex; align-items:center; justify-content:center;
+    height:100%; padding:0 18px; text-align:center;
+    font: 400 13px/1.5 -apple-system, system-ui, sans-serif; color:${colors.inkSoft};
+  }
 </style>
 </head>
 <body>
 <div id="map"></div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
+  // Ohne Netz laedt Leaflet nicht - dann eine Erklaerung zeigen statt
+  // einer leeren weissen Flaeche.
+  if (typeof L === 'undefined') {
+    document.getElementById('map').innerHTML =
+      '<div class="qek-msg">Karte konnte nicht geladen werden.<br>Pr&uuml;fe deine Internetverbindung.</div>';
+  } else {
   var map = L.map('map', {
     zoomControl: ${controls},
     dragging: ${controls},
@@ -111,7 +149,17 @@ function buildHtml(
   }).addTo(map);
 
   var icon = L.divIcon({ className: '', html: '<div class="qek-pin"></div>', iconSize: [26,26], iconAnchor: [13,13] });
-  L.marker([${lat}, ${lon}], { icon: icon }).addTo(map).bindPopup(${JSON.stringify(safeLabel)});
+  var marker = L.marker([${lat}, ${lon}], { icon: icon }).addTo(map).bindPopup(${JSON.stringify(safeLabel)});
+
+  if (${pickable ? 'true' : 'false'}) {
+    map.on('click', function (event) {
+      marker.setLatLng(event.latlng);
+      if (window.ReactNativeWebView) {
+        window.ReactNativeWebView.postMessage(event.latlng.lat + ',' + event.latlng.lng);
+      }
+    });
+  }
+  }
 </script>
 </body>
 </html>`;

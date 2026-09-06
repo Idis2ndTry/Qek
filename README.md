@@ -8,9 +8,14 @@ Alles bleibt auf deinem Gerät.
 
 ## Was die App kann
 
-- **Plätze eintragen** — Name tippen, die App sucht den Platz über
-  OpenStreetMap und trägt Adresse, Koordinaten und Land automatisch ein.
-  Alternativ per GPS („Ich stehe gerade hier").
+- **Plätze finden** — drei Wege, damit auch kleine Plätze auftauchen:
+  Namenssuche über die Campingplatz-Daten von OpenStreetMap; einen Ort
+  eintippen und alle Plätze im Umkreis von 25 km auflisten lassen; oder
+  „Plätze in meiner Nähe" per GPS. Adresse, Koordinaten und Land trägt die
+  App selbst ein, bekannte Merkmale (Strom, Hunde, Wohnwagen) kommen gleich
+  als Chips mit.
+- **Wenn ein Platz gar nicht eingetragen ist** — Standort selbst auf der
+  Karte antippen, die Adresse wird dazu nachgeschlagen.
 - **Durchklick-Bewertung** — zehn Kategorien, eine Frage pro Bildschirm,
   fünf große Sterne. Kategorien lassen sich überspringen.
 - **Gewichtete Gesamtnote** — Sanitär, Preis und Lage zählen anderthalbfach,
@@ -35,12 +40,18 @@ Alles bleibt auf deinem Gerät.
 | Navigation | expo-router (dateibasiert) |
 | Datenbank | expo-sqlite, lokal auf dem Gerät |
 | Karten | Leaflet + OpenStreetMap in einer WebView — kein API-Schlüssel nötig |
-| Ortssuche | Nominatim (OpenStreetMap), entprellt und gedrosselt |
+| Ortssuche | Nominatim (Orte, Adressen) und Overpass (Campingplätze), entprellt und gedrosselt |
 | Schriften | Bungee (Logo), Archivo (Oberfläche), Space Mono (Zahlen) |
 
 Es werden bewusst **keine kostenpflichtigen Google-APIs** verwendet. Der
 vollständige Google-Eintrag wird per Deeplink in Google Maps geöffnet — das
 kostet nichts und braucht kein Konto.
+
+Warum zwei Suchdienste: Nominatim ist eine Textsuche und findet einen
+Campingplatz nur bei fast exaktem Namenstreffer. Overpass fragt die Karte
+direkt ab („alles, was hier als Campingplatz eingetragen ist") und liefert
+damit auch kleine, namenlose und abgelegene Plätze. Beide laufen parallel,
+der Ausfall eines Dienstes kippt die Suche nicht.
 
 ## Aufs Handy bringen
 
@@ -108,7 +119,7 @@ src/
   components/           Wiederverwendbare Bausteine im Retro-Stil
   constants/            Bewertungskategorien und Gewichtung
   db/                   SQLite-Schema, Migrationen, Datenzugriff
-  services/             Ortssuche, Fotos, Sicherung, externe Links
+  services/             Orts- und Campingplatzsuche, Fotos, Sicherung, Links
   theme/                Farben, Schriften, Abstände
   utils/                Datums- und Zahlenformate
 ```

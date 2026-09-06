@@ -124,12 +124,23 @@ function buildMapHtml(places: PlaceSummary[]): string {
     border-radius:6px; background:${colors.red}; color:#fff;
     font: 700 12px/1 -apple-system, system-ui, sans-serif;
   }
+  .qek-msg {
+    display:flex; align-items:center; justify-content:center;
+    height:100%; padding:0 24px; text-align:center;
+    font: 400 14px/1.5 -apple-system, system-ui, sans-serif; color:${colors.inkSoft};
+  }
 </style>
 </head>
 <body>
 <div id="map"></div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
+  // Ohne Netz laedt Leaflet nicht - dann eine Erklaerung zeigen statt
+  // einer leeren weissen Flaeche.
+  if (typeof L === 'undefined') {
+    document.getElementById('map').innerHTML =
+      '<div class="qek-msg">Die Karte braucht eine Internetverbindung.<br>Deine Eintr&auml;ge sind alle da - nur das Kartenbild fehlt gerade.</div>';
+  } else {
   var places = ${JSON.stringify(markers)};
   var map = L.map('map', { zoomControl: true, attributionControl: true });
 
@@ -160,6 +171,7 @@ function buildMapHtml(places: PlaceSummary[]): string {
 
   if (bounds.length === 1) map.setView(bounds[0], 11);
   else map.fitBounds(bounds, { padding: [45, 45] });
+  }
 </script>
 </body>
 </html>`;

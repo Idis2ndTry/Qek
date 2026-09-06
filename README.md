@@ -105,10 +105,22 @@ eigenem Icon, ohne Rechner, ohne Expo Go. Genau richtig, um die App auf
 mehreren Testgeräten auszuprobieren.
 
 ```bash
+npm install                                # WICHTIG: zuerst die Projekt-
+                                           # bibliotheken installieren
 npm install -g eas-cli
 eas login                                  # kostenloses Expo-Konto
 eas build --platform android --profile preview
 ```
+
+Das erste `npm install` ist unverzichtbar — ohne den Ordner `node_modules`
+bricht der Build mit „Failed to resolve plugin for module expo-router" ab.
+`npm install -g eas-cli` installiert nur das Build-Werkzeug, nicht die
+Bausteine des Projekts.
+
+EAS verlangt ein Git-Repository. Beim ZIP-Download fehlt das; EAS bietet
+dann von selbst an, `git init` auszuführen und einen ersten Commit
+anzulegen — das kann man bestätigen. Fragt es bei späteren Builds nach
+uncommitteten Änderungen, ebenfalls bestätigen.
 
 Beim ersten Lauf fragt EAS zweimal nach:
 

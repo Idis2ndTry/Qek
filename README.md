@@ -122,6 +122,11 @@ dann von selbst an, `git init` auszuführen und einen ersten Commit
 anzulegen — das kann man bestätigen. Fragt es bei späteren Builds nach
 uncommitteten Änderungen, ebenfalls bestätigen.
 
+Läuft der Befehl mit *„Installed expo-updates and configured EAS Update.
+Command must be re-run"* aus, ist nichts kaputt: EAS hat sich selbst
+eingerichtet und braucht einen zweiten Anlauf. Denselben Befehl einfach
+noch einmal ausführen.
+
 Beim ersten Lauf fragt EAS zweimal nach:
 
 - *„Would you like to automatically create an EAS project?"* → **Yes**

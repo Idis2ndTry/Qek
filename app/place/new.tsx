@@ -15,6 +15,7 @@ import { router } from 'expo-router';
 import * as Location from 'expo-location';
 
 import { AppHeader } from '@/components/AppHeader';
+import { AddressLookup } from '@/components/AddressLookup';
 import { MapPreview } from '@/components/MapPreview';
 import { RetroButton } from '@/components/RetroButton';
 import { Screen } from '@/components/Screen';
@@ -274,6 +275,7 @@ export default function NewPlaceScreen() {
               pin={manualPin}
               onSetPin={setManualPin}
               onConfirmPin={useManualPin}
+              onAddressResolved={choose}
               onWithoutLocation={useWithoutLocation}
               canWidenSearch={Boolean(aroundMode) && !aroundMode?.wide}
               onWidenSearch={() =>
@@ -558,6 +560,7 @@ function NotFoundBlock({
   pin,
   onSetPin,
   onConfirmPin,
+  onAddressResolved,
   onWithoutLocation,
   canWidenSearch,
   onWidenSearch,
@@ -569,6 +572,7 @@ function NotFoundBlock({
   pin: { lat: number; lon: number } | null;
   onSetPin: (pin: { lat: number; lon: number }) => void;
   onConfirmPin: () => void;
+  onAddressResolved: (result: PlaceSuggestion) => void;
   onWithoutLocation: () => void;
   canWidenSearch: boolean;
   onWidenSearch: () => void;
@@ -605,29 +609,36 @@ function NotFoundBlock({
 
       {open && (
         <View style={styles.manualBody}>
-          <Text style={styles.hint}>
-            Tippe den Standort auf der Karte an – zoomen und verschieben geht mit zwei Fingern. Die
-            Adresse trägt die App dann selbst nach.
-          </Text>
+          {/* Der bequemste Weg zuerst: Adresse tippen statt auf der Karte
+              suchen. Die Karte bleibt als Rückfallebene darunter. */}
+          <AddressLookup onResolved={onAddressResolved} />
+
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>oder auf der Karte</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
           <MapPreview
             lat={lat}
             lon={lon}
             label="Standort wählen"
-            height={250}
+            height={230}
             zoom={pin ? 14 : 5}
             onPick={(pickedLat, pickedLon) => onSetPin({ lat: pickedLat, lon: pickedLon })}
           />
           <RetroButton
             label={pin ? 'Diesen Standort übernehmen' : 'Erst auf der Karte antippen'}
             onPress={onConfirmPin}
+            variant="secondary"
             icon="pin"
             fullWidth
             disabled={!pin}
           />
           <RetroButton
-            label="Ohne Standort anlegen"
+            label="Ganz ohne Standort anlegen"
             onPress={onWithoutLocation}
-            variant="secondary"
+            variant="ghost"
             icon="create-outline"
             fullWidth
           />
@@ -803,6 +814,22 @@ const styles = StyleSheet.create({
   },
   manualBody: {
     gap: spacing.md,
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginTop: spacing.xs,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.line,
+  },
+  dividerText: {
+    ...typography.label,
+    fontSize: 10,
+    color: colors.inkFaint,
   },
   footer: {
     padding: spacing.lg,

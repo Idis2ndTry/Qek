@@ -69,3 +69,44 @@ export async function openInOpenStreetMap(target: Target): Promise<void> {
     `https://www.openstreetmap.org/?mlat=${target.lat}&mlon=${target.lon}#map=16/${target.lat}/${target.lon}`,
   );
 }
+
+/** Instagram-Profil des Entwicklers. */
+const INSTAGRAM_HANDLE = 'Qek_to_the_Future';
+
+/**
+ * Öffnet das Instagram-Profil - bevorzugt in der App, sonst im Browser.
+ */
+export async function openInstagram(): Promise<void> {
+  const appUrl = `instagram://user?username=${INSTAGRAM_HANDLE}`;
+  const webUrl = `https://www.instagram.com/${INSTAGRAM_HANDLE}/`;
+
+  if (Platform.OS !== 'web') {
+    try {
+      if (await Linking.canOpenURL(appUrl)) {
+        await Linking.openURL(appUrl);
+        return;
+      }
+    } catch {
+      // Fällt unten auf den Browser zurück.
+    }
+  }
+  await Linking.openURL(webUrl);
+}
+
+/** Feedback per E-Mail, mit vorbereitetem Betreff. */
+export async function openFeedbackMail(appVersion: string): Promise<void> {
+  const subject = encodeURIComponent(`Reise-Tagebuch ${appVersion} – Feedback`);
+  const body = encodeURIComponent(
+    [
+      'Hallo,',
+      '',
+      'mir ist Folgendes aufgefallen:',
+      '',
+      '',
+      '---',
+      `App-Version: ${appVersion}`,
+      `System: ${Platform.OS} ${String(Platform.Version)}`,
+    ].join('\n'),
+  );
+  await Linking.openURL(`mailto:?subject=${subject}&body=${body}`);
+}

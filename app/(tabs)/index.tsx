@@ -68,8 +68,8 @@ export default function DiaryScreen() {
       <View style={styles.header}>
         <View style={styles.brandRow}>
           <View style={styles.brandText}>
-            <Text style={styles.brand}>QEK TO THE FUTURE</Text>
-            <Text style={styles.tagline}>Dein Camping-Reisetagebuch</Text>
+            <Text style={styles.brand}>REISE-TAGEBUCH</Text>
+            <Text style={styles.tagline}>by @Qek_to_the_Future</Text>
           </View>
           <View style={styles.counter}>
             <Text style={styles.counterValue}>{places.length}</Text>
@@ -207,6 +207,7 @@ const styles = StyleSheet.create({
   },
   tagline: {
     ...typography.caption,
+    fontSize: 12,
     color: colors.inkSoft,
     marginTop: 2,
   },

@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "Qek to the Future",
+    "name": "Reise-Tagebuch",
     "slug": "qek-to-the-future",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "qek",

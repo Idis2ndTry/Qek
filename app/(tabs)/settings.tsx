@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 
 import { AppHeader } from '@/components/AppHeader';
 import { AwningStripes } from '@/components/AwningStripes';
@@ -11,6 +11,7 @@ import { Surface } from '@/components/Surface';
 import { CATEGORIES } from '@/constants/categories';
 import { getStats, type Stats } from '@/db/repository';
 import { exportBackup, importBackup } from '@/services/backup';
+import { shareSummary } from '@/services/share';
 import { colors, fonts, spacing, type as typography } from '@/theme';
 
 /** Sicherung, Kategorien-Übersicht und Infos zur App. */
@@ -80,7 +81,8 @@ export default function SettingsScreen() {
         <Surface style={styles.brandCard} offset={5}>
           <AwningStripes height={12} stripeWidth={20} scalloped />
           <View style={styles.brandBody}>
-            <Text style={styles.brandTitle}>QEK TO THE FUTURE</Text>
+            <Text style={styles.brandTitle}>REISE-TAGEBUCH</Text>
+            <Text style={styles.brandBy}>by @Qek_to_the_Future</Text>
             <Text style={styles.brandText}>
               Dein persönliches Camping-Reisetagebuch. Alle Einträge, Bewertungen und Fotos
               bleiben auf diesem Gerät – nichts wird irgendwohin hochgeladen.
@@ -88,6 +90,36 @@ export default function SettingsScreen() {
             <Text style={styles.version}>Version {version}</Text>
           </View>
         </Surface>
+
+        <Section title="Info & Feedback">
+          <Row
+            icon="information-circle-outline"
+            title="Über die App"
+            subtitle="Wie die Note entsteht und was mit deinen Daten passiert"
+            onPress={() => router.push('/info')}
+          />
+          <Row
+            icon="logo-instagram"
+            title="Entwickler kontaktieren"
+            subtitle="@Qek_to_the_Future – Ideen, Fehler und Platz-Tipps"
+            onPress={() => router.push('/info')}
+          />
+          <Row
+            icon="share-social-outline"
+            title="Meine Reisebilanz teilen"
+            subtitle="Kurze Übersicht für WhatsApp, Mail und andere"
+            onPress={() =>
+              stats &&
+              shareSummary({
+                placeCount: stats.placeCount,
+                totalNights: stats.totalNights,
+                averageOverall: stats.averageOverall,
+                bestPlaceName: stats.bestPlace?.name ?? null,
+              }).catch(() => {})
+            }
+            last
+          />
+        </Section>
 
         <Section title="Sicherung">
           <Row
@@ -238,6 +270,12 @@ const styles = StyleSheet.create({
     fontSize: 17,
     color: colors.red,
     letterSpacing: 0.4,
+  },
+  brandBy: {
+    ...typography.caption,
+    fontSize: 12,
+    color: colors.red,
+    marginTop: -4,
   },
   brandText: {
     ...typography.body,

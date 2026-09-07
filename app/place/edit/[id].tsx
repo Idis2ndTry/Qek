@@ -1,26 +1,19 @@
 import { useEffect, useState } from 'react';
-import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 
+import { AddressLookup } from '@/components/AddressLookup';
 import { AppHeader } from '@/components/AppHeader';
 import { Chip } from '@/components/Chip';
+import { MapPreview } from '@/components/MapPreview';
 import { RetroButton } from '@/components/RetroButton';
 import { Screen } from '@/components/Screen';
 import { Surface } from '@/components/Surface';
 import { SUGGESTED_TAGS } from '@/constants/categories';
-import { useScrollToInput } from '@/hooks/useScrollToInput';
 import { getPlace, setTags, updatePlace } from '@/db/repository';
+import type { PlaceSuggestion } from '@/services/nominatim';
 import { colors, fonts, radius, spacing, type as typography } from '@/theme';
 import { formatDateShort, nightsBetween, parseGermanDate, todayIso } from '@/utils/format';
 
@@ -40,8 +33,15 @@ export default function EditPlaceScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // Hält das Notizfeld über der Tastatur.
-  const { scrollRef, onLayout, onFocus } = useScrollToInput();
+  /** Standort des Platzes - über die Adresssuche änderbar. */
+  const [location, setLocation] = useState<{
+    address: string | null;
+    lat: number | null;
+    lon: number | null;
+    country: string | null;
+  }>({ address: null, lat: null, lon: null, country: null });
+  const [addressOpen, setAddressOpen] = useState(false);
+
 
   useEffect(() => {
     let active = true;
@@ -54,6 +54,15 @@ export default function EditPlaceScreen() {
       setNotes(place.notes ?? '');
       setSelectedTags(place.tags);
       setWouldReturn(place.wouldReturn);
+      setLocation({
+        address: place.address,
+        lat: place.lat,
+        lon: place.lon,
+        country: place.country,
+      });
+      // Fehlt der Standort, ist die Adresseingabe gleich offen - genau
+      // dafür wird dieser Bildschirm dann ja aufgerufen.
+      setAddressOpen(place.lat === null || place.lon === null);
       setLoading(false);
     });
     return () => {
@@ -104,6 +113,10 @@ export default function EditPlaceScreen() {
     try {
       await updatePlace(placeId, {
         name: name.trim(),
+        address: location.address,
+        lat: location.lat,
+        lon: location.lon,
+        country: location.country,
         visitedFrom: fromIso,
         visitedTo: toIso,
         nights,
@@ -126,17 +139,12 @@ export default function EditPlaceScreen() {
   return (
     <Screen>
       <AppHeader title="Platz bearbeiten" showBack />
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      <KeyboardAwareScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+        bottomOffset={90}
       >
-        <ScrollView
-          ref={scrollRef}
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="interactive"
-          automaticallyAdjustKeyboardInsets
-        >
           <Field label="NAME DES PLATZES">
             <TextInput
               value={name}
@@ -147,6 +155,61 @@ export default function EditPlaceScreen() {
               accessibilityLabel="Name des Platzes"
             />
           </Field>
+
+          <View style={styles.block}>
+            <Pressable
+              style={styles.locationHeader}
+              onPress={() => setAddressOpen((v) => !v)}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: addressOpen }}
+            >
+              <Ionicons
+                name={location.lat === null ? 'location-outline' : 'location'}
+                size={18}
+                color={location.lat === null ? colors.inkSoft : colors.red}
+              />
+              <View style={styles.locationText}>
+                <Text style={styles.locationTitle}>STANDORT</Text>
+                <Text style={styles.locationValue} numberOfLines={2}>
+                  {location.address || (location.lat !== null
+                    ? 'Standort gesetzt, ohne Adresse'
+                    : 'Noch kein Standort hinterlegt')}
+                </Text>
+              </View>
+              <Ionicons
+                name={addressOpen ? 'chevron-up' : 'chevron-down'}
+                size={18}
+                color={colors.inkSoft}
+              />
+            </Pressable>
+
+            {addressOpen && (
+              <View style={styles.locationBody}>
+                <AddressLookup
+                  initialValue={location.address ?? ''}
+                  label="ADRESSE SUCHEN"
+                  onResolved={(result: PlaceSuggestion) => {
+                    setLocation({
+                      address: result.address,
+                      lat: result.lat,
+                      lon: result.lon,
+                      country: result.country,
+                    });
+                    setAddressOpen(false);
+                  }}
+                />
+              </View>
+            )}
+
+            {location.lat !== null && location.lon !== null && !addressOpen && (
+              <MapPreview
+                lat={location.lat}
+                lon={location.lon}
+                label={name || 'Platz'}
+                height={150}
+              />
+            )}
+          </View>
 
           <View style={styles.row}>
             <Field label="ANREISE" style={styles.half} error={fromInvalid}>
@@ -254,12 +317,10 @@ export default function EditPlaceScreen() {
             </View>
           </View>
 
-          <View onLayout={onLayout}>
           <Field label="DEIN TAGEBUCH-EINTRAG">
             <TextInput
               value={notes}
               onChangeText={setNotes}
-              onFocus={onFocus}
               style={[styles.input, styles.notesInput]}
               placeholder="Wie war es? Was war besonders?"
               placeholderTextColor={colors.inkFaint}
@@ -268,7 +329,6 @@ export default function EditPlaceScreen() {
               accessibilityLabel="Eigener Text"
             />
           </Field>
-          </View>
 
           <RetroButton
             label="Änderungen speichern"
@@ -278,8 +338,7 @@ export default function EditPlaceScreen() {
             loading={saving}
             style={styles.saveButton}
           />
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAwareScrollView>
     </Screen>
   );
 }
@@ -356,6 +415,34 @@ const styles = StyleSheet.create({
   },
   labelError: {
     color: colors.red,
+  },
+  locationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.paper,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    borderColor: colors.line,
+  },
+  locationText: {
+    flex: 1,
+  },
+  locationTitle: {
+    ...typography.label,
+    fontSize: 10,
+    color: colors.inkFaint,
+  },
+  locationValue: {
+    ...typography.caption,
+    fontSize: 13,
+    color: colors.ink,
+    marginTop: 1,
+  },
+  locationBody: {
+    paddingTop: spacing.sm,
   },
   inputCard: {
     paddingHorizontal: spacing.md,

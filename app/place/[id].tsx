@@ -26,6 +26,7 @@ import { CATEGORIES } from '@/constants/categories';
 import { addPhoto, deletePhoto, deletePlace, getPlace, toggleFavorite } from '@/db/repository';
 import type { PlaceWithDetails } from '@/db/types';
 import { openGoogleSearch, openInGoogleMaps, openNavigation } from '@/services/links';
+import { sharePlace } from '@/services/share';
 import { pickFromLibrary, removePhotoFile, takePhoto } from '@/services/photos';
 import { colors, fonts, radius, spacing, type as typography } from '@/theme';
 import { formatDateRange, formatEuro, formatScore } from '@/utils/format';
@@ -146,6 +147,14 @@ export default function PlaceDetailScreen() {
         showBack
         right={
           <View style={styles.headerActions}>
+            <Pressable
+              onPress={() => sharePlace(place).catch(() => {})}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Eintrag teilen"
+            >
+              <Ionicons name="share-social-outline" size={22} color={colors.inkSoft} />
+            </Pressable>
             <Pressable
               onPress={async () => {
                 await toggleFavorite(placeId);
@@ -368,6 +377,15 @@ export default function PlaceDetailScreen() {
         ) : null}
 
         <RetroButton
+          label="Diesen Eintrag teilen"
+          onPress={() => sharePlace(place).catch(() => {})}
+          variant="secondary"
+          icon="share-social"
+          fullWidth
+          style={styles.shareButton}
+        />
+
+        <RetroButton
           label="Platz löschen"
           onPress={confirmDeletePlace}
           variant="danger"
@@ -461,7 +479,7 @@ const styles = StyleSheet.create({
   },
   headerActions: {
     flexDirection: 'row',
-    gap: spacing.lg,
+    gap: spacing.md,
     alignItems: 'center',
   },
   content: {
@@ -623,8 +641,11 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.ink,
   },
-  deleteButton: {
+  shareButton: {
     marginTop: spacing.md,
+  },
+  deleteButton: {
+    marginTop: spacing.sm,
   },
   lightbox: {
     flex: 1,

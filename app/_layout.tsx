@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFonts } from 'expo-font';
 import { Bungee_400Regular } from '@expo-google-fonts/bungee';
@@ -64,6 +65,13 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={styles.root} onLayout={onLayout}>
+      {/*
+        Die App zeichnet randlos bis unter die Systemleisten. Android
+        verkleinert die Ansicht dann nicht mehr von selbst, wenn die
+        Tastatur aufgeht - der KeyboardProvider liefert die dafür nötigen
+        Maße an die tastaturbewussten Listen.
+      */}
+      <KeyboardProvider>
       <SafeAreaProvider>
         <Stack
           screenOptions={{
@@ -77,8 +85,10 @@ export default function RootLayout() {
           <Stack.Screen name="place/[id]" />
           <Stack.Screen name="place/edit/[id]" options={{ animation: 'slide_from_bottom' }} />
           <Stack.Screen name="rate/[id]" options={{ animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="info" options={{ animation: 'slide_from_bottom' }} />
         </Stack>
       </SafeAreaProvider>
+      </KeyboardProvider>
     </GestureHandlerRootView>
   );
 }

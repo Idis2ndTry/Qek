@@ -1,4 +1,4 @@
-# Qek to the Future — Camping-Reisetagebuch
+# Reise-Tagebuch — by @Qek_to_the_Future
 
 Eine Handy-App, in der du besuchte Campingplätze festhältst, sie Kategorie für
 Kategorie mit Sternen bewertest und Fotos, Notizen und den Standort dazulegst.
@@ -33,6 +33,13 @@ Alles bleibt auf deinem Gerät.
 - **Merkmale** als Chips („Am Wasser", „Hunde erlaubt", …), eigene möglich.
 - **Karte** mit allen Plätzen als farbige Nadeln, die Farbe zeigt die Note.
 - **Statistik** — Nächte, Ausgaben, Lieblingsplatz, Stärken je Kategorie.
+- **Teilen** — jeder Eintrag lässt sich als fertig formatierte Nachricht
+  über WhatsApp, Mail oder alles andere verschicken: Name, Gesamtnote,
+  Einzelbewertungen als Sternreihen, Reisedaten, der eigene Text und ein
+  Kartenlink. Die Reisebilanz gibt es als Kurzfassung dazu.
+- **Info & Feedback** — eigener Bereich mit Kontakt über Instagram
+  (@Qek_to_the_Future), Fehlermeldung per Mail und einer Erklärung, wie die
+  Gesamtnote zustande kommt.
 - **Sicherung** — Export als JSON (wahlweise mit eingebetteten Fotos) und
   Wiederherstellung.
 
@@ -46,6 +53,7 @@ Alles bleibt auf deinem Gerät.
 | Karten | Leaflet + OpenStreetMap in einer WebView — kein API-Schlüssel nötig |
 | Ortssuche | Nominatim (Orte, Adressen) und Overpass (Campingplätze), entprellt und gedrosselt |
 | Schriften | Bungee (Logo), Archivo (Oberfläche), Space Mono (Zahlen) |
+| Tastatur | react-native-keyboard-controller — nötig, weil die App randlos zeichnet und Android die Ansicht dann nicht mehr selbst verkleinert |
 
 Es werden bewusst **keine kostenpflichtigen Google-APIs** verwendet. Der
 vollständige Google-Eintrag wird per Deeplink in Google Maps geöffnet — das
@@ -156,6 +164,21 @@ Das erzeugt eine `.aab`-Datei zum Hochladen in die Google Play Console. Nötig
 sind ein Google-Play-Entwicklerkonto (einmalig 25 US-Dollar), eine
 Datenschutzerklärung und die Angaben zur Datensicherheit — dort ist
 anzugeben, dass die App keine Daten sammelt oder überträgt.
+
+### Update auf schon installierte Testgeräte
+
+Für Änderungen, die nur JavaScript betreffen, reicht:
+
+```bash
+eas update --branch preview --message "Was sich geändert hat"
+```
+
+Die installierte App holt sich die Aktualisierung beim nächsten Start —
+ohne neue Installationsdatei.
+
+**Eine neue APK ist nötig**, sobald sich etwas Natives ändert: eine neue
+Bibliothek mit nativem Anteil, Berechtigungen, App-Name, Icon oder die
+Version in `app.json`. Dann wieder der Build-Befehl von oben.
 
 ### Weitere Befehle
 

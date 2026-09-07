@@ -8,7 +8,7 @@ import { Screen } from '@/components/Screen';
 import { Surface } from '@/components/Surface';
 import { CATEGORIES } from '@/constants/categories';
 import { openFeedbackMail, openInstagram } from '@/services/links';
-import { colors, fonts, radius, spacing, type as typography } from '@/theme';
+import { centeredContent, colors, fonts, radius, spacing, type as typography } from '@/theme';
 
 /** Info über die App, Kontakt zum Entwickler und Feedback-Wege. */
 export default function InfoScreen() {
@@ -150,6 +150,7 @@ function Row({
 
 const styles = StyleSheet.create({
   content: {
+    ...centeredContent,
     padding: spacing.lg,
     paddingBottom: spacing.xxxl,
     gap: spacing.xl,

@@ -12,7 +12,7 @@ import { CATEGORIES } from '@/constants/categories';
 import { getStats, type Stats } from '@/db/repository';
 import { exportBackup, importBackup } from '@/services/backup';
 import { shareSummary } from '@/services/share';
-import { colors, fonts, spacing, type as typography } from '@/theme';
+import { centeredContent, colors, fonts, spacing, type as typography } from '@/theme';
 
 /** Sicherung, Kategorien-Übersicht und Infos zur App. */
 export default function SettingsScreen() {
@@ -254,6 +254,7 @@ function InfoRow({ label, value, last = false }: { label: string; value: string;
 
 const styles = StyleSheet.create({
   content: {
+    ...centeredContent,
     padding: spacing.lg,
     paddingBottom: spacing.xxxl,
     gap: spacing.xl,

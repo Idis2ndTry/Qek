@@ -61,22 +61,31 @@ Aufzählungszeichen sind alles, was zur Gliederung bleibt.
 | --- | --- | --- |
 | App-Symbol | 512 × 512 PNG | aus `assets/icon.png` skalieren |
 | Feature-Grafik | 1024 × 500 PNG | ✅ `store/feature-grafik-1024x500.png` |
-| Screenshots Handy | mind. 2, empfohlen 4–8 | selbst aufnehmen (siehe unten) |
+| Screenshots Handy | mind. 2, empfohlen 4–8 | ✅ `store/screenshots/handy/` |
+| Screenshots Tablet | optional | ✅ `store/screenshots/tablet-*/` |
 
-### Screenshots aufnehmen
+### Screenshots
 
-Mindestens zwei, besser vier bis acht. Empfohlene Reihenfolge, weil sie die
-App in der Nutzungsreihenfolge zeigt:
+Liegen fertig unter `store/screenshots/` — je sechs Stück in drei Größen:
 
-1. **Tagebuch-Liste** mit drei, vier eingetragenen Plätzen
-2. **Bewertungs-Durchlauf** — ein Kategorie-Bildschirm mit gesetzten Sternen
-3. **Zusammenfassung** mit Gesamtnote
-4. **Platz-Detail** mit Karte und Fotos
-5. **Karte** mit mehreren farbigen Nadeln
-6. **Statistik**
+| Ordner | Auflösung | Feld in der Console |
+| --- | --- | --- |
+| `screenshots/handy/` | 1080 × 2338 | Smartphone |
+| `screenshots/tablet-7-zoll/` | 1200 × 1920 | Tablet (7 Zoll) |
+| `screenshots/tablet-10-zoll/` | 1600 × 2560 | Tablet (10 Zoll) |
 
-Vorher ein paar echte Plätze mit Fotos eintragen — leere Bildschirme wirken
-im Store unfertig.
+Die Bilder sind aus der laufenden App aufgenommen, mit drei angelegten
+Plätzen: Tagebuch-Liste, ein Bewertungsschritt, die Zusammenfassung mit
+Gesamtnote, ein Platz im Detail, die Statistik und der Info-Bereich.
+
+**Tablet-Screenshots sind keine Pflicht.** Ohne sie wird die App auf
+Tablets nur schlechter gefunden; die Veröffentlichung blockiert das nicht.
+Die Dateien liegen trotzdem bereit.
+
+**Eigene Screenshots sind besser**, sobald echte Reisen mit eigenen Fotos
+drin sind — Fotos machen im Store den größten Unterschied. Aufnehmen auf
+dem Handy mit *Leiser + Ein/Aus* gleichzeitig; die hier abgelegten Bilder
+zeigen, welche Bildschirme sich lohnen.
 
 ---
 

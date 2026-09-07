@@ -24,7 +24,7 @@ import { createPlace, setTags } from '@/db/repository';
 import { reverseGeocode, type PlaceSuggestion } from '@/services/nominatim';
 import { formatDistance, type CampsiteSuggestion } from '@/services/overpass';
 import { EMPTY_SEARCH, runSearch, searchAround, type SearchUpdate } from '@/services/campsiteSearch';
-import { colors, fonts, radius, spacing, type as typography } from '@/theme';
+import { centeredContent, colors, fonts, radius, spacing, type as typography } from '@/theme';
 
 /** Wartezeit nach dem letzten Tastendruck, bevor gesucht wird. */
 const DEBOUNCE_MS = 450;
@@ -650,6 +650,7 @@ function NotFoundBlock({
 
 const styles = StyleSheet.create({
   content: {
+    ...centeredContent,
     padding: spacing.lg,
     paddingBottom: spacing.xxl,
   },

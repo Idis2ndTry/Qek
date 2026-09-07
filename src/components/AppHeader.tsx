@@ -3,7 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
 import { AwningStripes } from './AwningStripes';
-import { colors, fonts, spacing, type as typography } from '@/theme';
+import { centeredContent, colors, fonts, spacing, type as typography } from '@/theme';
 
 type Props = {
   title: string;
@@ -59,6 +59,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.ink,
   },
   row: {
+    ...centeredContent,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,

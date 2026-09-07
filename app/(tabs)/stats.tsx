@@ -10,7 +10,7 @@ import { ScoreBadge, scoreColor } from '@/components/ScoreBadge';
 import { Surface } from '@/components/Surface';
 import { CATEGORY_BY_KEY } from '@/constants/categories';
 import { getStats, type Stats } from '@/db/repository';
-import { colors, fonts, radius, spacing, type as typography } from '@/theme';
+import { centeredContent, colors, fonts, radius, spacing, type as typography } from '@/theme';
 import { formatEuro, formatScore } from '@/utils/format';
 
 /** Zahlen zu deinen Reisen: Nächte, Ausgaben, Lieblingsplatz, Stärken. */
@@ -199,6 +199,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 const styles = StyleSheet.create({
   content: {
+    ...centeredContent,
     padding: spacing.lg,
     paddingBottom: spacing.xxxl,
     gap: spacing.xl,

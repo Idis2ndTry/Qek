@@ -28,7 +28,7 @@ import type { PlaceWithDetails } from '@/db/types';
 import { openGoogleSearch, openInGoogleMaps, openNavigation } from '@/services/links';
 import { sharePlace } from '@/services/share';
 import { pickFromLibrary, removePhotoFile, takePhoto } from '@/services/photos';
-import { colors, fonts, radius, spacing, type as typography } from '@/theme';
+import { centeredContent, colors, fonts, radius, spacing, type as typography } from '@/theme';
 import { formatDateRange, formatEuro, formatScore } from '@/utils/format';
 
 /** Alles zu einem Campingplatz: Note, Karte, Google-Link, Fotos und Text. */
@@ -483,6 +483,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   content: {
+    ...centeredContent,
     padding: spacing.lg,
     paddingBottom: spacing.xxxl,
     gap: spacing.lg,

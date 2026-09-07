@@ -61,6 +61,22 @@ export const spacing = {
   xxxl: 48,
 } as const;
 
+/**
+ * Größte Breite, die Inhalte einnehmen dürfen.
+ *
+ * Die App ist fürs Handy gebaut. Auf einem Tablet würde sich alles über die
+ * volle Breite ziehen - Listen wirken dann leer und Textzeilen werden
+ * unangenehm lang. Stattdessen bleibt der Inhalt in einer Spalte, zentriert.
+ */
+export const maxContentWidth = 640;
+
+/** Auf Handys unverändert, auf breiten Bildschirmen mittig begrenzt. */
+export const centeredContent = {
+  width: '100%',
+  maxWidth: maxContentWidth,
+  alignSelf: 'center',
+} as const;
+
 export const radius = {
   sm: 6,
   md: 10,

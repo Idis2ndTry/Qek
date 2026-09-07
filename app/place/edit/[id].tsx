@@ -14,7 +14,7 @@ import { Surface } from '@/components/Surface';
 import { SUGGESTED_TAGS } from '@/constants/categories';
 import { getPlace, setTags, updatePlace } from '@/db/repository';
 import type { PlaceSuggestion } from '@/services/nominatim';
-import { colors, fonts, radius, spacing, type as typography } from '@/theme';
+import { centeredContent, colors, fonts, radius, spacing, type as typography } from '@/theme';
 import { formatDateShort, nightsBetween, parseGermanDate, todayIso } from '@/utils/format';
 
 /** Reisedaten, Preis, Merkmale und der eigene Text zu einem Platz. */
@@ -393,6 +393,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
+    ...centeredContent,
     padding: spacing.lg,
     // Reichlich Luft, damit die unteren Felder bei offener Tastatur weit
     // genug nach oben geschoben werden können.

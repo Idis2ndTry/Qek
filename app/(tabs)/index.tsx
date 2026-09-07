@@ -18,7 +18,7 @@ import { PlaceCard } from '@/components/PlaceCard';
 import { Screen } from '@/components/Screen';
 import { listPlaces, toggleFavorite, type PlaceSort } from '@/db/repository';
 import type { PlaceSummary } from '@/db/types';
-import { colors, fonts, radius, spacing, type as typography } from '@/theme';
+import { centeredContent, colors, fonts, radius, spacing, type as typography } from '@/theme';
 import { formatScore } from '@/utils/format';
 
 const SORT_OPTIONS: { key: PlaceSort; label: string }[] = [
@@ -189,6 +189,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.ink,
   },
   brandRow: {
+    ...centeredContent,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
@@ -236,6 +237,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
   controls: {
+    ...centeredContent,
     paddingTop: spacing.md,
     gap: spacing.md,
     backgroundColor: colors.cream,
@@ -264,6 +266,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
   },
   list: {
+    ...centeredContent,
     padding: spacing.lg,
     paddingBottom: 110,
     gap: 0,

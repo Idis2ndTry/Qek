@@ -21,7 +21,7 @@ import { StarRating } from '@/components/StarRating';
 import { Surface } from '@/components/Surface';
 import { CATEGORIES, STAR_LABELS } from '@/constants/categories';
 import { computeOverall, getPlace, setRating, updatePlace } from '@/db/repository';
-import { colors, fonts, radius, spacing, type as typography } from '@/theme';
+import { centeredContent, colors, fonts, radius, spacing, type as typography } from '@/theme';
 import { formatScore } from '@/utils/format';
 
 /**
@@ -323,6 +323,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   step: {
+    ...centeredContent,
     flex: 1,
     padding: spacing.xl,
   },
@@ -389,6 +390,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   summary: {
+    ...centeredContent,
     padding: spacing.lg,
     // Reichlich Luft, damit das Textfeld auch bei offener Tastatur weit
     // genug nach oben geschoben werden kann.

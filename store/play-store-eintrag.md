@@ -152,9 +152,12 @@ Pflichtfeld. Die fertige Seite liegt unter `docs/datenschutz.html`.
 
 Diese Adresse trägst du in der Play Console unter *Datenschutzerklärung* ein.
 
-> Vor der Veröffentlichung: In der Datei fehlt noch eine ladungsfähige
-> Anschrift und eine E-Mail-Adresse. Für eine öffentlich angebotene App ist
-> das in Deutschland Pflicht.
+Anschrift und E-Mail sind eingetragen. Unter `docs/impressum.html` liegt
+zusätzlich ein Impressum, das über dieselbe Adresse erreichbar ist:
+`https://idis2ndtry.github.io/Qek/impressum.html`
+
+In der Play Console gehört die Kontakt-E-Mail außerdem unter
+*Store-Präsenz → Store-Eintrag → Kontaktdaten*.
 
 ---
 

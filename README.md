@@ -160,10 +160,14 @@ Jeder spätere Build braucht nur noch den einen Befehl; unter
 eas build --platform android --profile production
 ```
 
-Das erzeugt eine `.aab`-Datei zum Hochladen in die Google Play Console. Nötig
-sind ein Google-Play-Entwicklerkonto (einmalig 25 US-Dollar), eine
-Datenschutzerklärung und die Angaben zur Datensicherheit — dort ist
-anzugeben, dass die App keine Daten sammelt oder überträgt.
+Das erzeugt eine `.aab`-Datei zum Hochladen in die Google Play Console.
+
+Alles, was der Store an Texten, Grafiken und Formularantworten verlangt,
+liegt vorbereitet unter [`store/play-store-eintrag.md`](store/play-store-eintrag.md):
+Kurz- und Vollbeschreibung, die Antworten zum Datensicherheits-Formular,
+die Feature-Grafik und das App-Symbol in Store-Größe. Die
+Datenschutzerklärung steht als fertige Seite unter `docs/datenschutz.html`
+und lässt sich über GitHub Pages veröffentlichen.
 
 ### Update auf schon installierte Testgeräte
 

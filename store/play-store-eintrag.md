@@ -96,8 +96,15 @@ Google fragt das beim Einrichten ab. Für diese App lauten die Antworten:
 | Frage | Antwort |
 | --- | --- |
 | Erhebt oder teilt die App Nutzerdaten? | **Nein** |
+| Verwendet die App eine Werbe-ID? | **Nein** |
 | Werden Daten bei der Übertragung verschlüsselt? | Ja (HTTPS) |
 | Können Nutzer das Löschen ihrer Daten anfordern? | Nicht zutreffend — es werden keine Daten erhoben |
+
+**Belegt für die Werbe-ID:** Im Projekt steckt keine Werbe-, Analyse- oder
+Tracking-Bibliothek, und im erzeugten Android-Manifest taucht die
+Berechtigung `com.google.android.gms.permission.AD_ID` nirgends auf. Nur
+wer diese Berechtigung deklariert — auch unbeabsichtigt über eine
+Bibliothek — muss hier „Ja" antworten.
 
 **Begründung, falls nachgefragt wird:** Alle Eingaben bleiben in einer
 lokalen Datenbank auf dem Gerät. Es gibt keinen Server des Anbieters, kein
@@ -133,6 +140,23 @@ In der Play Console gehört die Kontakt-E-Mail außerdem unter
 *Store-Präsenz → Store-Eintrag → Kontaktdaten*.
 
 ---
+
+## Berechtigungen der App
+
+Was die fertige App anfordert und wofür:
+
+| Berechtigung | Wofür |
+| --- | --- |
+| `INTERNET` | Platzsuche und Kartenkacheln |
+| `ACCESS_COARSE_LOCATION`, `ACCESS_FINE_LOCATION` | nur für „Plätze in meiner Nähe“ |
+| `READ_EXTERNAL_STORAGE`, `WRITE_EXTERNAL_STORAGE` | Fotos auswählen und im App-Ordner ablegen |
+| `CAMERA` | Foto direkt aufnehmen |
+| `VIBRATE` | leichtes Rütteln beim Setzen der Sterne |
+
+`RECORD_AUDIO` und `SYSTEM_ALERT_WINDOW` bringt Expos Vorlage mit; beide
+sind über `blockedPermissions` in `app.json` entfernt, weil die App weder
+Ton aufnimmt noch Fenster über andere Apps legt. Ohne das stünde im Store
+bei den Zugriffen „Audio aufnehmen“.
 
 ## Inhaltseinstufung
 

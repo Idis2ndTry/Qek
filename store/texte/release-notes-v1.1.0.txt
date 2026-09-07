@@ -1,0 +1,8 @@
+Erste Veröffentlichung.
+
+• Campingplätze eintragen und in zehn Kategorien mit Sternen bewerten
+• Gewichtete Gesamtnote, eigener Tagebuch-Text und Fotos
+• Platzsuche über OpenStreetMap, auch für kleine Stellplätze
+• Karte mit allen Zielen, Statistik zu Nächten und Ausgaben
+• Einträge per WhatsApp oder Mail teilen
+• Alles bleibt auf dem Gerät, mit Sicherung zum Wiederherstellen

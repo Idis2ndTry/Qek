@@ -22,74 +22,38 @@ Die Zeichengrenzen sind eingehalten.
 
 ---
 
-## Kurzbeschreibung (max. 80 Zeichen)
+## Texte
 
-```
-Campingplätze festhalten, ehrlich bewerten und beim nächsten Mal wiederfinden.
-```
+Alle Texte liegen als reine Textdateien unter `store/texte/` — dort öffnen,
+alles markieren, kopieren, in die Play Console einfügen. Die Zeichengrenzen
+sind geprüft.
 
-*(77 Zeichen)*
+| Datei | Feld in der Console | Länge |
+| --- | --- | --- |
+| `texte/app-name.txt` | App-Name | 23 / 30 |
+| `texte/beschreibung-kurz.txt` | Kurzbeschreibung | 66 / 80 |
+| `texte/beschreibung-vollstaendig.txt` | Vollständige Beschreibung | 2693 / 4000 |
+| `texte/release-notes-v1.1.0.txt` | Neuerungen in dieser Version | 378 / 500 |
 
----
+### Zum App-Namen
 
-## Vollständige Beschreibung (max. 4000 Zeichen)
+Der Name im Store und der Name auf dem Startbildschirm sind zwei getrennte
+Dinge. Auf dem Handy steht weiterhin schlicht **Reise-Tagebuch** (aus
+`app.json`); im Store darf der Eintrag anders lauten.
 
-```
-Dein persönliches Camping-Reisetagebuch.
+Empfohlen ist **„Reise-Tagebuch: Camping"**. Der Grund: Der Store findet
+Apps auch über den Namen, und „Reise-Tagebuch" allein trifft nicht das Wort,
+nach dem gesucht wird. Wer schlicht **„Reise-Tagebuch"** bevorzugt, kann das
+ohne Weiteres nehmen — die Auffindbarkeit leidet, die App bleibt dieselbe.
 
-Halte fest, wo du mit Wohnwagen, Wohnmobil oder Zelt gestanden hast – und
-finde beim nächsten Mal wieder, wo es sich wirklich gelohnt hat.
+### Warum die Beschreibung so aufgebaut ist
 
-BEWERTEN OHNE AUFWAND
-Nach jedem Platz klickst du dich einmal durch zehn kurze Fragen: Größe des
-Stellplatzes, Sanitäranlagen, Essen, Preis-Leistung, Unterhaltung, Lage,
-Ruhe, Ver- und Entsorgung, Personal und WLAN. Eine Frage pro Bildschirm,
-fünf große Sterne, fertig. Was dich nicht interessiert, überspringst du.
-
-EINE NOTE, DIE ZU DIR PASST
-Aus deinen Sternen entsteht eine gewichtete Gesamtnote. Sanitär, Preis und
-Lage zählen stärker, WLAN weniger. Übersprungene Kategorien fließen gar
-nicht ein – wer das Internet nicht bewertet, wird dafür auch nicht
-abgestraft.
-
-PLÄTZE FINDEN, AUCH DIE KLEINEN
-Tipp den Namen ein oder einfach nur den Ort: Die App durchsucht die
-Campingplatz-Daten von OpenStreetMap und zeigt dir auch die kleinen,
-namenlosen Plätze in der Umgebung – mit Entfernung und Ausstattung. Oder
-lass dir per GPS zeigen, was gerade in deiner Nähe liegt. Fehlt ein Platz,
-trägst du ihn über die Adresse oder direkt auf der Karte selbst ein.
-
-DEIN TAGEBUCH
-Zu jedem Platz gehören deine eigenen Zeilen, Fotos aus der Galerie oder
-direkt aus der Kamera, Reisedaten, der Preis pro Nacht und Merkmale wie
-"Am Wasser" oder "Hunde erlaubt". Auf einer Karte siehst du alle Ziele auf
-einen Blick, die Nadeln färben sich nach deiner Note.
-
-DEINE REISEBILANZ
-Wie viele Nächte warst du unterwegs? Was hast du ausgegeben? Welcher Platz
-war der beste? Und worauf solltest du beim nächsten Mal besonders achten?
-Die Statistik beantwortet das auf einen Blick.
-
-TEILEN
-Einen gelungenen Platz empfiehlt man gern weiter. Ein Tipp auf "Teilen"
-erzeugt eine fertige Nachricht mit Note, Einzelbewertungen und Kartenlink –
-für WhatsApp, Mail oder was du sonst nutzt.
-
-DEINE DATEN BLEIBEN BEI DIR
-Kein Konto, keine Anmeldung, kein Server, keine Werbung. Alle Einträge,
-Bewertungen und Fotos liegen ausschließlich auf deinem Gerät. Damit nichts
-verloren geht, kannst du jederzeit eine Sicherungsdatei erstellen und sie
-später wieder einlesen.
-
-Kartendaten von OpenStreetMap.
-
-Entwickelt aus dem eigenen Wohnwagen heraus.
-Rückmeldungen gern über Instagram: @Qek_to_the_Future
-```
-
-*(rund 2200 Zeichen)*
-
----
+In der Trefferliste und über der Beschreibung sind nur die **ersten zwei bis
+drei Zeilen** sichtbar, alles Weitere erst nach „Mehr". Deshalb steht ganz
+vorn keine Aufzählung, sondern die Situation, die jeder kennt: Der Platz war
+gut, der Name ist weg. Die Abschnitte darunter sind mit ● abgesetzt, weil die
+Console keine Formatierung erlaubt — Überschriften in Großbuchstaben und ein
+Aufzählungszeichen sind alles, was zur Gliederung bleibt.
 
 ## Grafiken
 
